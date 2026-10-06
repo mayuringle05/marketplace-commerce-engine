@@ -110,3 +110,56 @@ export function reconcileSimulatedPurchase(
         providerPoId: row.provider_po_id,
       };
 }
+
+export function recordRecoveredSimulatedPurchase(
+  database: DatabaseSync,
+  request: SimulatedPurchaseRequest,
+  state: "CONFIRMED" | "REJECTED",
+): string {
+  const existing = database
+    .prepare(
+      `
+        SELECT provider_po_id, state
+        FROM simulated_supplier_orders
+        WHERE idempotency_key = ?
+      `,
+    )
+    .get(request.idempotencyKey) as
+    | { provider_po_id: string; state: string }
+    | undefined;
+
+  if (existing !== undefined) {
+    if (existing.state !== state) {
+      throw new Error("Recovered supplier state conflicts with history.");
+    }
+    return existing.provider_po_id;
+  }
+
+  const providerPoId = `SIMPO-${request.clientPoRef}`;
+
+  database
+    .prepare(
+      `
+        INSERT INTO simulated_supplier_orders (
+          idempotency_key,
+          provider_po_id,
+          client_po_ref,
+          amount_paise,
+          quantity,
+          state,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+    )
+    .run(
+      request.idempotencyKey,
+      providerPoId,
+      request.clientPoRef,
+      request.amountPaise,
+      request.quantity,
+      state,
+      request.submittedAt,
+    );
+
+  return providerPoId;
+}
