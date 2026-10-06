@@ -238,6 +238,37 @@ export function submitPurchaseOnce(
     throw new Error("Order is not ready for purchase submission.");
   }
 
+  const marketplaceOrder = database
+    .prepare(
+      `
+        SELECT
+          o.marketplace,
+          o.marketplace_order_id,
+          r.status
+        FROM orders o
+        LEFT JOIN simulated_marketplace_orders r
+          ON r.marketplace = o.marketplace
+          AND r.marketplace_order_id = o.marketplace_order_id
+        WHERE o.id = ?
+      `,
+    )
+    .get(po.order_id) as
+    | {
+        marketplace: string;
+        marketplace_order_id: string;
+        status: string | null;
+      }
+    | undefined;
+
+  if (
+    marketplaceOrder === undefined ||
+    marketplaceOrder.status !== "ACCEPTED"
+  ) {
+    throw new Error(
+      "Authoritative marketplace order is not ACCEPTED; purchase blocked.",
+    );
+  }
+
   database.exec("BEGIN IMMEDIATE");
   try {
     transitionOrder(
