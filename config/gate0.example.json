@@ -1,0 +1,21 @@
+{
+  "legalSellerEntity": false,
+  "taxRegimeConfirmed": false,
+  "marketplaceSellerAccountApproved": false,
+  "currentRateCardCaptured": false,
+  "officialApiAccessApproved": false,
+  "supplierSelected": false,
+  "supplierLegalIdentityVerified": false,
+  "supplierInvoiceVerified": false,
+  "candidateQuotesObtained": false,
+  "allocationAndValidityDocumented": false,
+  "priceLockTermsDocumented": false,
+  "singleUnitDispatchProven": false,
+  "dispatchLocationApproved": false,
+  "returnRouteApproved": false,
+  "packageDataAvailable": false,
+  "cutoffsDocumented": false,
+  "paymentTermsDocumented": false,
+  "capitalAndReservesSet": false,
+  "operatorCoverageSet": false
+}
