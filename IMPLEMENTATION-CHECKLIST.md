@@ -11,7 +11,7 @@
 - [x] Implementation checklist added
 - [x] Repository visibility intentionally **public for now** (owner decision)
 - [ ] Gate 0 commercial feasibility complete
-- [ ] Checkpoint 1 deterministic economics complete — **17/17 hardening tests green in CI; revised local owner validation + lint/format pending**
+- [ ] Checkpoint 1 deterministic economics complete — **locked install + format + lint + typecheck + 17/17 tests green in CI; final local owner validation pending**
 - [ ] V1a observer complete
 - [ ] V1b controlled trading complete
 - [ ] V1c bounded automatic operation complete
@@ -56,7 +56,7 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 - [x] Initialize Node.js + TypeScript
 - [x] Strict TypeScript configuration
-- [ ] Lint / formatting
+- [x] Lint / formatting
 - [x] Unit-test runner
 - [x] GitHub Actions CI
 - [x] `.gitignore`
@@ -135,7 +135,7 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 - [x] Fresh checkout installs successfully
 - [x] Typecheck passes
-- [ ] Lint passes
+- [x] Lint passes
 - [x] Unit tests pass
 - [x] GitHub CI passes
 - [x] One human hand-calculation matches the engine
