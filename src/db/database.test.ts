@@ -59,7 +59,7 @@ function insertMinimumCatalogue(database: ReturnType<typeof openDatabase>) {
     );
 }
 
-test("applies the V1a migration exactly once", () => {
+test("applies each V1a migration exactly once", () => {
   const database = openDatabase(":memory:", {
     appliedAt: TEST_TIMESTAMP,
   });
@@ -71,7 +71,7 @@ test("applies the V1a migration exactly once", () => {
       .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
       .get() as { count: bigint };
 
-    assert.equal(row.count, 1n);
+    assert.equal(row.count, 2n);
   } finally {
     database.close();
   }
