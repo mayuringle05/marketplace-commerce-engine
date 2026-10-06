@@ -17,6 +17,7 @@ export type IdentityReason =
   | "GLOBAL_IDENTIFIER_CONFLICT"
   | "BRAND_CONTRADICTION"
   | "PACK_COUNT_CONTRADICTION"
+  | "VARIANT_CONTRADICTION"
   | "CONDITION_CONTRADICTION"
   | "EDITION_CONTRADICTION"
   | "REGION_CONTRADICTION";
@@ -33,6 +34,7 @@ export interface IdentityProfile {
   readonly condition?: string | null;
   readonly marketRegion?: string | null;
   readonly edition?: string | null;
+  readonly variant?: string | null;
   readonly packCount?: number | null;
   readonly identifiers?: readonly IdentityIdentifierInput[];
 }
@@ -110,6 +112,9 @@ function hardContradictionReasons(
   }
   if (comparableEqual(canonical.edition, observed.edition) === false) {
     reasons.push("EDITION_CONTRADICTION");
+  }
+  if (comparableEqual(canonical.variant, observed.variant) === false) {
+    reasons.push("VARIANT_CONTRADICTION");
   }
 
   if (
@@ -228,4 +233,10 @@ export function classifyIdentity(
     reasons: ["NO_STRONG_IDENTITY_EVIDENCE"],
     matchedGlobalKeys: [],
   };
+}
+
+export function isAutomationEligibleIdentityClass(
+  classification: IdentityClass,
+): boolean {
+  return classification === "A" || classification === "B";
 }
