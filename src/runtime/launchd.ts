@@ -31,7 +31,7 @@ export function generateLaunchdPlist(
 
   const args = [
     config.nodePath,
-    "src/cli/worker-once.ts",
+    "src/cli/worker-loop.ts",
     config.databasePath,
   ];
 
