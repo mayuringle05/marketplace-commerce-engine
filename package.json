@@ -11,7 +11,7 @@
     "format:check": "node scripts/verify-source.mjs format",
     "lint": "node scripts/verify-source.mjs lint",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test src/economics/engine.test.ts",
+    "test": "node --test src/economics/engine.test.ts src/db/database.test.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
   },
   "devDependencies": {
