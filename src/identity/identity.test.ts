@@ -6,7 +6,10 @@ import {
   normalizeIdentifier,
   toGlobalTradeKey,
 } from "./identifiers.ts";
-import { classifyIdentity } from "./matcher.ts";
+import {
+  classifyIdentity,
+  isAutomationEligibleIdentityClass,
+} from "./matcher.ts";
 
 test("validates and normalizes known GTIN formats", () => {
   assert.deepEqual(normalizeIdentifier("GTIN8", "9638 5074"), {
@@ -165,6 +168,7 @@ test("hard-vetoes pack, condition, edition, and region contradictions", () => {
       condition: "new",
       marketRegion: "IN",
       edition: "2026",
+      variant: "black",
       packCount: 1,
       identifiers: [
         {
@@ -178,6 +182,7 @@ test("hard-vetoes pack, condition, edition, and region contradictions", () => {
       condition: "used",
       marketRegion: "US",
       edition: "2025",
+      variant: "white",
       packCount: 2,
       identifiers: [
         {
@@ -193,6 +198,7 @@ test("hard-vetoes pack, condition, edition, and region contradictions", () => {
     "CONDITION_CONTRADICTION",
     "REGION_CONTRADICTION",
     "EDITION_CONTRADICTION",
+    "VARIANT_CONTRADICTION",
     "PACK_COUNT_CONTRADICTION",
   ]);
 });
@@ -267,4 +273,12 @@ test("hard-vetoes brand contradictions even when identifiers match", () => {
 
   assert.equal(result.classification, "CONFLICT");
   assert.deepEqual(result.reasons, ["BRAND_CONTRADICTION"]);
+});
+
+test("only A and B identity classes are automation-eligible", () => {
+  assert.equal(isAutomationEligibleIdentityClass("A"), true);
+  assert.equal(isAutomationEligibleIdentityClass("B"), true);
+  assert.equal(isAutomationEligibleIdentityClass("C"), false);
+  assert.equal(isAutomationEligibleIdentityClass("D"), false);
+  assert.equal(isAutomationEligibleIdentityClass("CONFLICT"), false);
 });
