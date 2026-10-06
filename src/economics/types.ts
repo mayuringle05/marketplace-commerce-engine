@@ -111,6 +111,13 @@ export type EconomicsReason =
 export interface BaseEconomicsResult {
   readonly status: EconomicsStatus;
   readonly reasons: readonly EconomicsReason[];
+  /**
+   * The three price-sensitive gates: minimum profit, margin, and cash ROI.
+   */
+  readonly pricingGatesPassed: boolean;
+  /**
+   * Pricing gates plus the separate complete-loss cash-reserve gate.
+   */
   readonly moneyGatesPassed: boolean;
   readonly netSalesPaise: Paise;
   readonly supplierEconomicCostPaise: Paise;
