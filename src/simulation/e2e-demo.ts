@@ -393,6 +393,7 @@ export function runLocalEndToEndDemo(
     amountPaise: 35_000,
     quantity: 1,
     destinationKey: "SIM-CUSTOMER-DESTINATION",
+    authorizationExpiresAt: "2026-10-07T00:18:00.000Z",
     createdAt: "2026-10-07T00:13:00.000Z",
   });
 
