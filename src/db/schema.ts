@@ -772,6 +772,21 @@ export const MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
+  {
+    version: 9,
+    name: "simulated_remote_order_authority",
+    sql: `
+      CREATE TABLE simulated_marketplace_orders (
+        marketplace TEXT NOT NULL,
+        marketplace_order_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+          status IN ('ACCEPTED', 'HELD', 'CANCELLED')
+        ),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (marketplace, marketplace_order_id)
+      ) STRICT;
+    `,
+  },
 ];
 
 export function applyMigrations(
