@@ -21,6 +21,7 @@ interface ExistingOfferRow {
   readonly available_units: bigint;
   readonly valid_from: string;
   readonly valid_until: string;
+  readonly source_version: string;
   readonly source_ref: string;
   readonly packed_weight_grams: bigint | null;
   readonly package_length_mm: bigint | null;
@@ -113,6 +114,7 @@ function findExisting(
           available_units,
           valid_from,
           valid_until,
+          source_version,
           source_ref,
           packed_weight_grams,
           package_length_mm,
@@ -121,14 +123,12 @@ function findExisting(
         FROM source_offers
         WHERE supplier_id = ?
           AND supplier_sku = ?
-          AND source_version = ?
           AND observed_at = ?
       `,
     )
     .get(
       feed.supplierId,
       offer.supplierSku,
-      feed.sourceVersion,
       feed.observedAt,
     ) as ExistingOfferRow | undefined;
 }
@@ -147,6 +147,7 @@ function replayMatches(
     row.available_units === BigInt(offer.availableUnits) &&
     row.valid_from === offer.validFrom &&
     row.valid_until === offer.validUntil &&
+    row.source_version === feed.sourceVersion &&
     row.source_ref === feed.sourceRef &&
     row.packed_weight_grams ===
       BigInt(offer.package.packedWeightGrams) &&
