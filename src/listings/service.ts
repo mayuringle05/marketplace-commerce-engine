@@ -5,11 +5,13 @@ import {
   readSimulatedListing,
   upsertSimulatedListing,
 } from "../marketplace/simulated.ts";
+import { readRuntimeSafety } from "../runtime/safety.ts";
 
 export interface ListingSyncInput {
   readonly marketplace: string;
   readonly sellerSku: string;
   readonly marketplaceCatalogueItemId: string;
+  readonly opportunityId: string;
   readonly sourceOfferId: string;
   readonly pricePaise: number;
   readonly requestedQuantity: number;
@@ -39,6 +41,33 @@ export function syncListingToSimulatedMarketplace(
   database: DatabaseSync,
   input: ListingSyncInput,
 ): string {
+  const safety = readRuntimeSafety(database);
+  if (safety.stopNewExposure) {
+    throw new Error(
+      `New exposure is blocked: ${safety.reason}`,
+    );
+  }
+
+  const opportunity = database
+    .prepare(
+      `
+        SELECT decision_state, source_offer_id
+        FROM opportunities
+        WHERE id = ?
+      `,
+    )
+    .get(input.opportunityId) as
+    | { decision_state: string; source_offer_id: string }
+    | undefined;
+
+  if (
+    opportunity === undefined ||
+    opportunity.decision_state !== "LIST" ||
+    opportunity.source_offer_id !== input.sourceOfferId
+  ) {
+    throw new Error("Listing requires a persisted LIST opportunity.");
+  }
+
   const offer = database
     .prepare(
       `
