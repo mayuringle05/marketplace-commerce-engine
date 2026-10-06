@@ -461,7 +461,7 @@ export function findMinimumGrossPriceForBaseMoneyGates(
   }
 
   for (
-    let price = input.minimumGrossPricePaise;
+    let price: number = input.minimumGrossPricePaise;
     price <= input.maximumGrossPricePaise;
     price += input.tickPaise
   ) {
