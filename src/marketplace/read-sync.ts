@@ -16,7 +16,25 @@ export interface MarketplaceReadPage {
 }
 
 export interface MarketplaceReadSource {
+  readonly approvedAccess: boolean;
   fetchPage(cursor: string | null): MarketplaceReadPage;
+}
+
+export class MarketplaceRateLimitError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super("Marketplace rate limit reached.");
+    if (
+      !Number.isSafeInteger(retryAfterSeconds) ||
+      retryAfterSeconds < 0
+    ) {
+      throw new Error(
+        "retryAfterSeconds must be a non-negative integer.",
+      );
+    }
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
 }
 
 export interface MarketplaceSyncResult {
@@ -32,6 +50,12 @@ export function syncMarketplaceReadStream(
   source: MarketplaceReadSource,
   syncedAt: string,
 ): MarketplaceSyncResult {
+  if (!source.approvedAccess) {
+    throw new Error(
+      "Marketplace read source is not approved for automated access.",
+    );
+  }
+
   const cursorRow = database
     .prepare(
       `
@@ -131,4 +155,45 @@ export function syncMarketplaceReadStream(
     duplicates,
     finalCursor: committedCheckpoint,
   };
+}
+
+export async function syncMarketplaceReadStreamWithRetry(
+  database: DatabaseSync,
+  marketplace: string,
+  stream: string,
+  source: MarketplaceReadSource,
+  syncedAt: string,
+  maximumAttempts: number,
+  sleeper: (milliseconds: number) => Promise<void>,
+): Promise<MarketplaceSyncResult> {
+  if (
+    !Number.isSafeInteger(maximumAttempts) ||
+    maximumAttempts < 1 ||
+    maximumAttempts > 10
+  ) {
+    throw new Error("maximumAttempts must be 1..10.");
+  }
+
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    try {
+      return syncMarketplaceReadStream(
+        database,
+        marketplace,
+        stream,
+        source,
+        syncedAt,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof MarketplaceRateLimitError) ||
+        attempt === maximumAttempts
+      ) {
+        throw error;
+      }
+
+      await sleeper(error.retryAfterSeconds * 1_000);
+    }
+  }
+
+  throw new Error("Marketplace read retry loop exhausted.");
 }
