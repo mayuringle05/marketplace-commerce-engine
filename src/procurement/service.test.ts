@@ -186,3 +186,81 @@ test("unknown purchase is quarantined and cannot be blindly resubmitted", () => 
     database.close();
   }
 });
+
+test("expired purchase authorization cannot submit a supplier order", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T,
+  });
+
+  try {
+    database
+      .prepare(
+        `
+          INSERT INTO suppliers (
+            id,
+            legal_name,
+            status,
+            created_at,
+            updated_at
+          ) VALUES ('supplier-expiry', 'Supplier Expiry', 'verified', ?, ?)
+        `,
+      )
+      .run(T, T);
+
+    database
+      .prepare(
+        `
+          INSERT INTO orders (
+            id,
+            marketplace,
+            marketplace_order_id,
+            state,
+            version,
+            received_at,
+            updated_at,
+            immutable_economics_json
+          ) VALUES (
+            'order-expiry',
+            'SIM',
+            'REMOTE-EXPIRY',
+            'AUTHORIZED',
+            1,
+            ?,
+            ?,
+            '{}'
+          )
+        `,
+      )
+      .run(T, T);
+
+    const poId = recordPurchaseIntent(database, {
+      orderId: "order-expiry",
+      supplierId: "supplier-expiry",
+      amountPaise: 35_000,
+      quantity: 1,
+      destinationKey: "DEST",
+      authorizationExpiresAt: "2026-10-07T00:02:00.000Z",
+      createdAt: "2026-10-07T00:01:00.000Z",
+    });
+
+    assert.throws(
+      () =>
+        submitPurchaseOnce(
+          database,
+          poId,
+          "CONFIRM",
+          "2026-10-07T00:02:01.000Z",
+        ),
+      /authorization has expired/,
+    );
+
+    const remote = database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM simulated_supplier_orders",
+      )
+      .get() as { count: bigint };
+    assert.equal(remote.count, 0n);
+  } finally {
+    database.close();
+  }
+});
