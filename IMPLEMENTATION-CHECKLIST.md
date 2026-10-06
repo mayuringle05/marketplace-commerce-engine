@@ -158,12 +158,12 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 - [ ] Separate canonical product, packaged trade unit, supplier SKU, marketplace catalogue ID, and seller listing
 - [ ] Preserve original identifiers and evidence
-- [ ] Validate GTIN/ISBN check digits
-- [ ] Exact valid identifier match
-- [ ] Brand + MPN/model fallback
-- [ ] Variant/pack/condition/edition/region contradiction veto
-- [ ] Identity classes A/B/C/D/Conflict
-- [ ] Only A/B can later become automation-eligible
+- [x] Validate GTIN/ISBN check digits
+- [x] Exact valid identifier match
+- [x] Brand + MPN/model fallback
+- [x] Variant/pack/condition/edition/region contradiction veto
+- [x] Identity classes A/B/C/D/Conflict
+- [x] Only A/B can later become automation-eligible
 - [ ] Approved mapping version and invalidation triggers persisted
 - [ ] Physical barcode/package verification required for onboarding/pick
 
