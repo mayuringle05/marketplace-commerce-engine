@@ -38,7 +38,7 @@ See:
 Requires Node.js 24.12+.
 
 ```bash
-npm install
+npm ci
 npm run check
 ```
 
