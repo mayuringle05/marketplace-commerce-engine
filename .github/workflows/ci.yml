@@ -28,5 +28,12 @@ jobs:
       - name: Install pinned development dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
 
-      - name: Typecheck and test
+      - name: Emit generated lockfile for repository bootstrap
+        run: |
+          echo "PACKAGE_LOCK_BASE64_BEGIN"
+          base64 -w0 package-lock.json
+          echo
+          echo "PACKAGE_LOCK_BASE64_END"
+
+      - name: Verify source, typecheck, and test
         run: npm run check
