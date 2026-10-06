@@ -68,6 +68,41 @@ export function syncListingToSimulatedMarketplace(
     throw new Error("Listing requires a persisted LIST opportunity.");
   }
 
+  const mapping = database
+    .prepare(
+      `
+        SELECT
+          m.identity_class,
+          m.mapping_status AS marketplace_mapping_status,
+          t.mapping_status AS trade_unit_mapping_status,
+          t.physical_verified_at
+        FROM marketplace_catalogue_items m
+        JOIN packaged_trade_units t
+          ON t.id = m.trade_unit_id
+        WHERE m.id = ?
+      `,
+    )
+    .get(input.marketplaceCatalogueItemId) as
+    | {
+        identity_class: string;
+        marketplace_mapping_status: string;
+        trade_unit_mapping_status: string;
+        physical_verified_at: string | null;
+      }
+    | undefined;
+
+  if (
+    mapping === undefined ||
+    !["A", "B"].includes(mapping.identity_class) ||
+    mapping.marketplace_mapping_status !== "APPROVED" ||
+    mapping.trade_unit_mapping_status !== "APPROVED" ||
+    mapping.physical_verified_at === null
+  ) {
+    throw new Error(
+      "Listing requires approved A/B mapping with physical verification.",
+    );
+  }
+
   const offer = database
     .prepare(
       `
