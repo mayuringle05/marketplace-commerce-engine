@@ -55,6 +55,19 @@ function seedAuthorizedOrder(
       `,
     )
     .run(T, T);
+
+  database
+    .prepare(
+      `
+        INSERT INTO simulated_marketplace_orders (
+          marketplace,
+          marketplace_order_id,
+          status,
+          updated_at
+        ) VALUES ('SIM', 'REMOTE-1', 'ACCEPTED', ?)
+      `,
+    )
+    .run(T);
 }
 
 test("unknown purchase is quarantined and cannot be blindly resubmitted", () => {
@@ -233,6 +246,19 @@ test("expired purchase authorization cannot submit a supplier order", () => {
       )
       .run(T, T);
 
+    database
+      .prepare(
+        `
+          INSERT INTO simulated_marketplace_orders (
+            marketplace,
+            marketplace_order_id,
+            status,
+            updated_at
+          ) VALUES ('SIM', 'REMOTE-EXPIRY', 'ACCEPTED', ?)
+        `,
+      )
+      .run(T);
+
     const poId = recordPurchaseIntent(database, {
       orderId: "order-expiry",
       supplierId: "supplier-expiry",
@@ -260,6 +286,63 @@ test("expired purchase authorization cannot submit a supplier order", () => {
       )
       .get() as { count: bigint };
     assert.equal(remote.count, 0n);
+  } finally {
+    database.close();
+  }
+});
+
+test("customer cancellation before supplier submission blocks purchase", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T,
+  });
+
+  try {
+    seedAuthorizedOrder(database);
+
+    const poId = recordPurchaseIntent(database, {
+      orderId: "order-1",
+      supplierId: "supplier-1",
+      amountPaise: 35_000,
+      quantity: 1,
+      destinationKey: "DEST-1",
+      authorizationExpiresAt: "2026-10-07T00:06:00.000Z",
+      createdAt: "2026-10-07T00:01:00.000Z",
+    });
+
+    database
+      .prepare(
+        `
+          UPDATE simulated_marketplace_orders
+          SET status = 'CANCELLED',
+              updated_at = '2026-10-07T00:01:30.000Z'
+          WHERE marketplace = 'SIM'
+            AND marketplace_order_id = 'REMOTE-1'
+        `,
+      )
+      .run();
+
+    assert.throws(
+      () =>
+        submitPurchaseOnce(
+          database,
+          poId,
+          "CONFIRM",
+          "2026-10-07T00:02:00.000Z",
+        ),
+      /not ACCEPTED/,
+    );
+
+    const remote = database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM simulated_supplier_orders",
+      )
+      .get() as { count: bigint };
+    const po = database
+      .prepare("SELECT state FROM purchase_orders WHERE id = ?")
+      .get(poId) as { state: string };
+
+    assert.equal(remote.count, 0n);
+    assert.equal(po.state, "INTENT_RECORDED");
   } finally {
     database.close();
   }
