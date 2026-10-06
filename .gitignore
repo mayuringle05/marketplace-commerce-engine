@@ -13,3 +13,5 @@ data/
 *.db-wal
 backups/
 secrets/
+
+config/gate0.local.json
