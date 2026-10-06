@@ -314,3 +314,37 @@ test("persists exact supplier price, stock, route, and package facts", () => {
     database.close();
   }
 });
+
+test("rejects a different source version at the same observation timestamp", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: NOW,
+  });
+
+  try {
+    seed(database);
+    importSupplierFeed(
+      database,
+      parseSupplierFeedJson(feedJson()),
+    );
+
+    const changed = JSON.parse(feedJson()) as Record<string, unknown>;
+    changed.sourceVersion = "quote-2026-10-07-v2";
+
+    const conflicting = parseSupplierFeedJson(
+      JSON.stringify(changed),
+    );
+
+    assert.throws(
+      () => importSupplierFeed(database, conflicting),
+      /Conflicting replay/,
+    );
+
+    const row = database
+      .prepare("SELECT COUNT(*) AS count FROM source_offers")
+      .get() as { count: bigint };
+
+    assert.equal(row.count, 1n);
+  } finally {
+    database.close();
+  }
+});
