@@ -152,7 +152,7 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] Preserve source timestamp/version
 - [x] Persist price, tax, allocation, validity, package data, dispatch location
 - [x] Idempotent import
-- [ ] Stale source becomes UNKNOWN/unavailable for new exposure
+- [x] Stale source becomes UNKNOWN/unavailable for new exposure
 
 ### Canonical product identity
 
