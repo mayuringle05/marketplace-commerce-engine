@@ -11,7 +11,7 @@
     "format:check": "node scripts/verify-source.mjs format",
     "lint": "node scripts/verify-source.mjs lint",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test src/economics/engine.test.ts src/db/database.test.ts src/identity/identity.test.ts src/supplier/importer.test.ts src/supplier/freshness.test.ts src/simulation/e2e-demo.test.ts src/procurement/service.test.ts src/runtime/runtime.test.ts src/runtime/ops.test.ts src/finance/outcomes.test.ts",
+    "test": "node --test src/economics/engine.test.ts src/db/database.test.ts src/identity/identity.test.ts src/identity/invalidation.test.ts src/supplier/importer.test.ts src/supplier/freshness.test.ts src/simulation/e2e-demo.test.ts src/procurement/service.test.ts src/runtime/runtime.test.ts src/runtime/ops.test.ts src/finance/outcomes.test.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "demo:e2e": "node src/cli/e2e-demo.ts",
     "gate0:status": "node src/cli/gate0-status.ts",
