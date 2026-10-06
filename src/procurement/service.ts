@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import {
+  assertCanonicalUtcTimestamp,
   canonicalJson,
   deterministicId,
   sha256Hex,
@@ -41,6 +42,7 @@ export interface PurchaseIntentInput {
   readonly amountPaise: number;
   readonly quantity: number;
   readonly destinationKey: string;
+  readonly authorizationExpiresAt: string;
   readonly createdAt: string;
 }
 
@@ -53,12 +55,27 @@ export function recordPurchaseIntent(
     throw new Error("Purchase intent requires AUTHORIZED order.");
   }
 
+  const createdMs = assertCanonicalUtcTimestamp(
+    input.createdAt,
+    "createdAt",
+  );
+  const expiresMs = assertCanonicalUtcTimestamp(
+    input.authorizationExpiresAt,
+    "authorizationExpiresAt",
+  );
+  if (expiresMs <= createdMs) {
+    throw new Error(
+      "Purchase authorization expiry must be after creation.",
+    );
+  }
+
   const payload = {
     orderId: input.orderId,
     supplierId: input.supplierId,
     amountPaise: input.amountPaise,
     quantity: input.quantity,
     destinationKey: input.destinationKey,
+    authorizationExpiresAt: input.authorizationExpiresAt,
   };
   const payloadHash = sha256Hex(canonicalJson(payload));
   const poId = deterministicId("po", input.orderId);
@@ -94,8 +111,9 @@ export function recordPurchaseIntent(
             idempotency_key,
             version,
             created_at,
-            updated_at
-          ) VALUES (?, ?, ?, ?, NULL, 'INTENT_RECORDED', ?, ?, ?, ?, 1, ?, ?)
+            updated_at,
+            authorization_expires_at
+          ) VALUES (?, ?, ?, ?, NULL, 'INTENT_RECORDED', ?, ?, ?, ?, 1, ?, ?, ?)
         `,
       )
       .run(
@@ -109,6 +127,7 @@ export function recordPurchaseIntent(
         idempotencyKey,
         input.createdAt,
         input.createdAt,
+        input.authorizationExpiresAt,
       );
 
     database
@@ -172,7 +191,8 @@ export function submitPurchaseOnce(
           idempotency_key,
           payload_hash,
           supplier_id,
-          state
+          state,
+          authorization_expires_at
         FROM purchase_orders
         WHERE id = ?
       `,
@@ -187,6 +207,7 @@ export function submitPurchaseOnce(
         payload_hash: string;
         supplier_id: string;
         state: string;
+        authorization_expires_at: string | null;
       }
     | undefined;
 
@@ -195,6 +216,21 @@ export function submitPurchaseOnce(
   }
   if (po.state !== "INTENT_RECORDED") {
     throw new Error("Purchase order is not ready for first submission.");
+  }
+  if (po.authorization_expires_at === null) {
+    throw new Error("Purchase authorization expiry is missing.");
+  }
+
+  const submittedMs = assertCanonicalUtcTimestamp(
+    submittedAt,
+    "submittedAt",
+  );
+  const expiresMs = assertCanonicalUtcTimestamp(
+    po.authorization_expires_at,
+    "authorizationExpiresAt",
+  );
+  if (submittedMs > expiresMs) {
+    throw new Error("Purchase authorization has expired.");
   }
 
   const order = readOrder(database, po.order_id);
