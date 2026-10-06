@@ -1,0 +1,236 @@
+import type { DatabaseSync } from "node:sqlite";
+
+import { deterministicId } from "../core/deterministic.ts";
+import {
+  readSimulatedListing,
+  upsertSimulatedListing,
+} from "../marketplace/simulated.ts";
+
+export interface ListingSyncInput {
+  readonly marketplace: string;
+  readonly sellerSku: string;
+  readonly marketplaceCatalogueItemId: string;
+  readonly sourceOfferId: string;
+  readonly pricePaise: number;
+  readonly requestedQuantity: number;
+  readonly cashExposureLimitUnits: number;
+  readonly updatedAt: string;
+}
+
+function activeReservedUnits(
+  database: DatabaseSync,
+  sourceOfferId: string,
+): bigint {
+  const row = database
+    .prepare(
+      `
+        SELECT COALESCE(SUM(units), 0) AS units
+        FROM reservations
+        WHERE source_offer_id = ?
+          AND status = 'ACTIVE'
+      `,
+    )
+    .get(sourceOfferId) as { units: bigint };
+
+  return row.units;
+}
+
+export function syncListingToSimulatedMarketplace(
+  database: DatabaseSync,
+  input: ListingSyncInput,
+): string {
+  const offer = database
+    .prepare(
+      `
+        SELECT allocated_units, available_units
+        FROM source_offers
+        WHERE id = ?
+      `,
+    )
+    .get(input.sourceOfferId) as
+    | { allocated_units: bigint; available_units: bigint }
+    | undefined;
+
+  if (offer === undefined) {
+    throw new Error("Source offer not found.");
+  }
+
+  const reserved = activeReservedUnits(database, input.sourceOfferId);
+  const safetyUnits = 1n;
+  const sourceCapacity =
+    offer.allocated_units - reserved - safetyUnits;
+  const availableCapacity =
+    offer.available_units - reserved - safetyUnits;
+  const requested = BigInt(input.requestedQuantity);
+  const cashLimit = BigInt(input.cashExposureLimitUnits);
+
+  const publicQuantity = [
+    sourceCapacity,
+    availableCapacity,
+    requested,
+    cashLimit,
+  ].reduce((minimum, value) => (value < minimum ? value : minimum));
+
+  const safeQuantity = publicQuantity > 0n ? publicQuantity : 0n;
+  const desiredState = safeQuantity > 0n ? "ACTIVE" : "PAUSED";
+  const id = deterministicId(
+    "listing",
+    input.marketplace,
+    input.sellerSku,
+  );
+
+  database
+    .prepare(
+      `
+        INSERT INTO listings (
+          id,
+          marketplace,
+          seller_sku,
+          marketplace_catalogue_item_id,
+          source_offer_id,
+          desired_price_paise,
+          desired_quantity,
+          observed_price_paise,
+          observed_quantity,
+          desired_state,
+          observed_state,
+          remote_version,
+          version,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'UNKNOWN', NULL, 1, ?)
+        ON CONFLICT(marketplace, seller_sku) DO UPDATE SET
+          source_offer_id = excluded.source_offer_id,
+          desired_price_paise = excluded.desired_price_paise,
+          desired_quantity = excluded.desired_quantity,
+          desired_state = excluded.desired_state,
+          version = listings.version + 1,
+          updated_at = excluded.updated_at
+      `,
+    )
+    .run(
+      id,
+      input.marketplace,
+      input.sellerSku,
+      input.marketplaceCatalogueItemId,
+      input.sourceOfferId,
+      input.pricePaise,
+      safeQuantity,
+      desiredState,
+      input.updatedAt,
+    );
+
+  const remote = upsertSimulatedListing(
+    database,
+    input.marketplace,
+    input.sellerSku,
+    input.pricePaise,
+    Number(safeQuantity),
+    desiredState,
+    input.updatedAt,
+  );
+
+  database
+    .prepare(
+      `
+        UPDATE listings
+        SET
+          observed_price_paise = ?,
+          observed_quantity = ?,
+          observed_state = ?,
+          remote_version = ?,
+          updated_at = ?
+        WHERE marketplace = ?
+          AND seller_sku = ?
+      `,
+    )
+    .run(
+      remote.pricePaise,
+      remote.quantity,
+      remote.state,
+      remote.remoteVersion.toString(),
+      input.updatedAt,
+      input.marketplace,
+      input.sellerSku,
+    );
+
+  return id;
+}
+
+export function pauseListingAndConfirm(
+  database: DatabaseSync,
+  marketplace: string,
+  sellerSku: string,
+  updatedAt: string,
+): void {
+  const local = database
+    .prepare(
+      `
+        SELECT desired_price_paise
+        FROM listings
+        WHERE marketplace = ?
+          AND seller_sku = ?
+      `,
+    )
+    .get(marketplace, sellerSku) as
+    | { desired_price_paise: bigint }
+    | undefined;
+
+  if (local === undefined) {
+    throw new Error("Listing not found.");
+  }
+
+  database
+    .prepare(
+      `
+        UPDATE listings
+        SET
+          desired_quantity = 0,
+          desired_state = 'PAUSED',
+          version = version + 1,
+          updated_at = ?
+        WHERE marketplace = ?
+          AND seller_sku = ?
+      `,
+    )
+    .run(updatedAt, marketplace, sellerSku);
+
+  upsertSimulatedListing(
+    database,
+    marketplace,
+    sellerSku,
+    Number(local.desired_price_paise),
+    0,
+    "PAUSED",
+    updatedAt,
+  );
+
+  const remote = readSimulatedListing(
+    database,
+    marketplace,
+    sellerSku,
+  );
+
+  if (remote.state !== "PAUSED" || remote.quantity !== 0n) {
+    throw new Error("Remote pause acknowledgement not observed.");
+  }
+
+  database
+    .prepare(
+      `
+        UPDATE listings
+        SET
+          observed_quantity = 0,
+          observed_state = 'PAUSED',
+          remote_version = ?,
+          updated_at = ?
+        WHERE marketplace = ?
+          AND seller_sku = ?
+      `,
+    )
+    .run(
+      remote.remoteVersion.toString(),
+      updatedAt,
+      marketplace,
+      sellerSku,
+    );
+}
