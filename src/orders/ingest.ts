@@ -112,6 +112,26 @@ export function ingestMarketplaceOrder(
       );
 
     if (orderInsert.changes === 1n) {
+      database
+        .prepare(
+          `
+            INSERT INTO simulated_marketplace_orders (
+              marketplace,
+              marketplace_order_id,
+              status,
+              updated_at
+            ) VALUES (?, ?, 'ACCEPTED', ?)
+            ON CONFLICT(marketplace, marketplace_order_id) DO UPDATE SET
+              status = excluded.status,
+              updated_at = excluded.updated_at
+          `,
+        )
+        .run(
+          event.marketplace,
+          event.marketplaceOrderId,
+          event.receivedAt,
+        );
+
       const quantity = BigInt(event.quantity);
 
       const localQuantity = database
