@@ -11,6 +11,7 @@ const ROOT = process.cwd();
 const CODE_DIRS = ["src", "scripts"];
 const CONFIG_FILES = [
   "package.json",
+  "package-lock.json",
   "tsconfig.json",
   ".github/workflows/ci.yml",
   ".env.example",
