@@ -41,13 +41,13 @@ function sumRationals(values: readonly Rational[]): Rational {
   return values.reduce((total, value) => add(total, value), ZERO);
 }
 
-function sumBufferPaise(scenario: EconomicScenario): number {
-  return (
-    scenario.buffers.feeUncertaintyPaise +
-    scenario.buffers.unmodelledPriceRiskPaise +
-    scenario.buffers.supplierRiskPaise +
-    scenario.buffers.allocatedOverheadPaise
-  );
+function totalBuffers(scenario: EconomicScenario): Rational {
+  return sumRationals([
+    fromPaise(scenario.buffers.feeUncertaintyPaise),
+    fromPaise(scenario.buffers.unmodelledPriceRiskPaise),
+    fromPaise(scenario.buffers.supplierRiskPaise),
+    fromPaise(scenario.buffers.allocatedOverheadPaise),
+  ]);
 }
 
 function validateNonNegativePaise(value: number, label: string): void {
@@ -83,10 +83,14 @@ function validateScenario(scenario: EconomicScenario): void {
     if (cost.id.trim().length === 0) {
       throw new Error("Cost component id cannot be empty.");
     }
+    if (cost.sourceVersion.trim().length === 0) {
+      throw new Error(`${cost.id}.sourceVersion cannot be empty.`);
+    }
     if (costIds.has(cost.id)) {
       throw new Error(`Duplicate cost component id: ${cost.id}`);
     }
     costIds.add(cost.id);
+
     validateNonNegativePaise(cost.netPaise, `${cost.id}.netPaise`);
     assertBasisPoints(
       cost.cashTaxRateBps,
@@ -124,6 +128,11 @@ function validateScenario(scenario: EconomicScenario): void {
     "minimumCashRoiBps",
   );
 
+  validateNonNegativePaise(
+    scenario.cashRisk.availableSingleOrderLossReservePaise,
+    "availableSingleOrderLossReservePaise",
+  );
+
   if (scenario.outcomes.length === 0) {
     throw new Error("At least one outcome is required.");
   }
@@ -138,7 +147,10 @@ function validateScenario(scenario: EconomicScenario): void {
     }
     seenKinds.add(outcome.kind);
 
-    assertSafeInteger(outcome.probabilityPpm, `${outcome.kind}.probabilityPpm`);
+    assertSafeInteger(
+      outcome.probabilityPpm,
+      `${outcome.kind}.probabilityPpm`,
+    );
     if (
       outcome.probabilityPpm < 0 ||
       outcome.probabilityPpm > PROBABILITY_PPM_TOTAL
@@ -152,9 +164,13 @@ function validateScenario(scenario: EconomicScenario): void {
     if (outcome.kind === "kept") {
       keptCount += 1;
     } else {
-      assertSafeInteger(
-        outcome.contributionPaise,
-        `${outcome.kind}.contributionPaise`,
+      validateNonNegativePaise(
+        outcome.costPaise,
+        `${outcome.kind}.costPaise`,
+      );
+      validateNonNegativePaise(
+        outcome.recoveryPaise,
+        `${outcome.kind}.recoveryPaise`,
       );
     }
   }
@@ -189,7 +205,10 @@ function outcomeContribution(
     return keptContribution;
   }
 
-  return fromPaise(outcome.contributionPaise);
+  return subtract(
+    fromPaise(outcome.recoveryPaise),
+    fromPaise(outcome.costPaise),
+  );
 }
 
 function completeOutcomeRecord(
@@ -244,7 +263,7 @@ export function evaluateBaseScenario(
 
   const decisionProfit = subtract(
     expectedContribution,
-    fromPaise(asPaise(sumBufferPaise(scenario))),
+    totalBuffers(scenario),
   );
 
   const peakCashRequirement = add(
@@ -256,6 +275,7 @@ export function evaluateBaseScenario(
     ),
   );
 
+  const completeLossExposure = peakCashRequirement;
   const reasons: EconomicsReason[] = [];
 
   if (
@@ -285,6 +305,17 @@ export function evaluateBaseScenario(
     )
   ) {
     reasons.push("CASH_ROI_BELOW_MINIMUM");
+  }
+
+  if (
+    compare(
+      fromPaise(
+        scenario.cashRisk.availableSingleOrderLossReservePaise,
+      ),
+      completeLossExposure,
+    ) < 0
+  ) {
+    reasons.push("COMPLETE_LOSS_RESERVE_INSUFFICIENT");
   }
 
   const moneyGatesPassed = reasons.length === 0;
@@ -320,6 +351,7 @@ export function evaluateBaseScenario(
     decisionProfitPaise: toPaise(decisionProfit),
     decisionMarginBps: ratioToBps(decisionProfit, netSales),
     peakCashRequirementPaise: toPaise(peakCashRequirement),
+    completeLossExposurePaise: toPaise(completeLossExposure),
     cashRoiBps: ratioToBps(decisionProfit, peakCashRequirement),
     outcomeContributionPaise: completeOutcomeRecord(
       scenario,
