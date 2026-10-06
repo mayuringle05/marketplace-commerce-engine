@@ -12,6 +12,7 @@ export interface MarketplaceReadEvent {
 export interface MarketplaceReadPage {
   readonly events: readonly MarketplaceReadEvent[];
   readonly nextCursor: string | null;
+  readonly checkpointCursor: string;
 }
 
 export interface MarketplaceReadSource {
@@ -46,6 +47,7 @@ export function syncMarketplaceReadStream(
 
   const initialCursor = cursorRow?.cursor ?? null;
   let cursor = initialCursor;
+  let committedCheckpoint = initialCursor;
   let inserted = 0;
   let duplicates = 0;
 
@@ -89,6 +91,7 @@ export function syncMarketplaceReadStream(
         }
       }
 
+      committedCheckpoint = page.checkpointCursor;
       cursor = page.nextCursor;
 
       if (page.nextCursor === null) {
@@ -110,7 +113,12 @@ export function syncMarketplaceReadStream(
             updated_at = excluded.updated_at
         `,
       )
-      .run(marketplace, stream, cursor, syncedAt);
+      .run(
+        marketplace,
+        stream,
+        committedCheckpoint,
+        syncedAt,
+      );
 
     database.exec("COMMIT");
   } catch (error) {
@@ -121,6 +129,6 @@ export function syncMarketplaceReadStream(
   return {
     inserted,
     duplicates,
-    finalCursor: cursor,
+    finalCursor: committedCheckpoint,
   };
 }
