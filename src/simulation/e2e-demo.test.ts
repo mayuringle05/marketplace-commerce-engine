@@ -14,8 +14,8 @@ test("runs the complete local commerce happy path to matured profit", () => {
 
     assert.equal(summary.finalOrderState, "MATURED");
     assert.equal(summary.opportunityState, "LIST");
-    assert.equal(summary.listingState, "ACTIVE");
-    assert.equal(summary.listingQuantity, 1n);
+    assert.equal(summary.listingState, "PAUSED");
+    assert.equal(summary.listingQuantity, 0n);
     assert.equal(summary.purchaseState, "CONFIRMED");
     assert.equal(summary.shipmentState, "DELIVERED");
     assert.equal(summary.recognizedProfitPaise, 21_503n);
