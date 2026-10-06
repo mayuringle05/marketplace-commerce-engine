@@ -10,11 +10,12 @@
 - [x] Strategy/build specification added
 - [x] Implementation checklist added
 - [x] Repository visibility intentionally **public for now** (owner decision)
-- [ ] Gate 0 commercial feasibility complete
+- [ ] Gate 0 commercial feasibility complete — **real commercial evidence still required**
 - [x] Checkpoint 1 deterministic economics complete — **merged to main; local economics validation passed and full locked CI is green**
-- [ ] V1a observer complete
-- [ ] V1b controlled trading complete
-- [ ] V1c bounded automatic operation complete
+- [x] Local end-to-end software simulation complete — **supplier feed → identity/economics/freshness → opportunity → listing → order → reservation → PO → fulfilment → settlement → matured profit**
+- [ ] V1a live observer validation complete — **real approved marketplace read path + real documents pending**
+- [ ] V1b live controlled-trading validation complete — **real owner-approved order pending**
+- [ ] V1c live bounded automatic operation complete — **promotion evidence and real supplier execution pending**
 
 ---
 
@@ -156,16 +157,16 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### Canonical product identity
 
-- [ ] Separate canonical product, packaged trade unit, supplier SKU, marketplace catalogue ID, and seller listing
-- [ ] Preserve original identifiers and evidence
+- [x] Separate canonical product, packaged trade unit, supplier SKU, marketplace catalogue ID, and seller listing
+- [x] Preserve original identifiers and evidence
 - [x] Validate GTIN/ISBN check digits
 - [x] Exact valid identifier match
 - [x] Brand + MPN/model fallback
 - [x] Variant/pack/condition/edition/region contradiction veto
 - [x] Identity classes A/B/C/D/Conflict
 - [x] Only A/B can later become automation-eligible
-- [ ] Approved mapping version and invalidation triggers persisted
-- [ ] Physical barcode/package verification required for onboarding/pick
+- [x] Approved mapping version and invalidation triggers persisted
+- [x] Physical barcode/package verification required for onboarding/pick
 
 ### Minimum viable SQLite database
 
@@ -177,67 +178,67 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] `fulfilment_routes`
 - [x] `source_offers`
 - [x] `observations`
-- [ ] `listings`
-- [ ] `opportunities`
-- [ ] `orders`
-- [ ] `order_items`
-- [ ] `reservations`
-- [ ] `purchase_orders`
-- [ ] `shipments`
-- [ ] `returns`
-- [ ] `ledger_entries`
-- [ ] `jobs`
-- [ ] `audit_events`
-- [ ] `exceptions`
-- [ ] `rules`
-- [ ] `signals_events`
-- [ ] Unique order/listing/PO/financial-event invariants
-- [ ] No negative reservations/available quota
-- [ ] Compare-and-set state/version transitions
-- [ ] Immutable order economics snapshots
+- [x] `listings`
+- [x] `opportunities`
+- [x] `orders`
+- [x] `order_items`
+- [x] `reservations`
+- [x] `purchase_orders`
+- [x] `shipments`
+- [x] `returns`
+- [x] `ledger_entries`
+- [x] `jobs`
+- [x] `audit_events`
+- [x] `exceptions`
+- [x] `rules`
+- [x] `signals_events`
+- [x] Unique order/listing/PO/financial-event invariants
+- [x] No negative reservations/available quota
+- [x] Compare-and-set state/version transitions
+- [x] Immutable order economics snapshots
 
 ### Marketplace read adapter
 
-- [ ] Exactly one marketplace first
-- [ ] Official/approved API only
-- [ ] Read-only permissions where possible
-- [ ] Durable cursor
-- [ ] Overlapping fetch window
-- [ ] Event deduplication
-- [ ] Full pagination before watermark advance
-- [ ] 429 / Retry-After handling
-- [ ] No consumer-page scraping dependency
+- [x] Exactly one local marketplace adapter first — **SIM adapter implemented**
+- [ ] Real marketplace official/approved API connector — **Gate 0/API access pending**
+- [ ] Real marketplace read-only permissions where possible — **account configuration pending**
+- [x] Durable cursor
+- [ ] Overlapping fetch window — **real provider cursor semantics pending**
+- [x] Event deduplication
+- [x] Full pagination before watermark advance
+- [x] 429 / Retry-After handling
+- [x] No consumer-page scraping dependency
 
 ### Opportunity engine
 
-- [ ] Supplier-first candidate funnel
-- [ ] Basic category/risk exclusions
-- [ ] Evidence freshness gates
-- [ ] Reactive demand mode
-- [ ] Predictive/event demand mode
-- [ ] Structural demand mode
-- [ ] Demand prioritization score `D`
-- [ ] Hard gates before opportunity score
-- [ ] Opportunity score
-- [ ] LIST / WATCH / REJECT state
-- [ ] Exact blocking reasons persisted
+- [x] Supplier-first flow — **local opportunities originate from imported supplier offers**
+- [x] Basic category/risk exclusion gate — **deterministic allow/block input; real category policy data pending**
+- [x] Evidence freshness gates
+- [x] Reactive demand mode
+- [x] Predictive/event demand mode
+- [x] Structural demand mode
+- [x] Demand prioritization score `D`
+- [x] Hard gates before opportunity score
+- [x] Opportunity score
+- [x] LIST / WATCH / REJECT state
+- [x] Exact blocking reasons persisted
 
 ### Finance observer
 
-- [ ] Immutable source financial events
-- [ ] Marketplace receivable tracking
-- [ ] Supplier payable tracking
-- [ ] Tax components tracked separately
-- [ ] Bank/settlement reconciliation
-- [ ] Profit based on reconciled/matured outcomes, not listed spread
+- [x] Immutable source financial events
+- [x] Marketplace receivable tracking
+- [x] Supplier payable tracking
+- [x] Tax components tracked separately
+- [x] Bank/settlement reconciliation
+- [x] Profit based on reconciled/matured outcomes, not listed spread
 
 ### V1a validation gate
 
-- [ ] One supplier feed ingests repeatedly without duplicates
-- [ ] One exact product mapping independently verified
-- [ ] One marketplace read path works through approved access
-- [ ] Sample real documents reconcile to engine calculations
-- [ ] V1a contains no external marketplace/supplier mutation capability
+- [x] One supplier feed ingests repeatedly without duplicates — **local fixture**
+- [ ] One exact product mapping independently verified — **real physical/product evidence pending**
+- [ ] One marketplace read path works through approved access — **real credentials/access pending**
+- [ ] Sample real documents reconcile to engine calculations — **real statements/invoices pending**
+- [x] Local observer contains no real external marketplace/supplier mutation capability
 
 ---
 
@@ -245,92 +246,94 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### Listings and exposure
 
-- [ ] Stable seller SKU
-- [ ] Desired vs observed remote state
-- [ ] Quantity sync
-- [ ] Price sync
-- [ ] Emergency pause
-- [ ] Pause requires remote acknowledgement
-- [ ] Exposure remains reserved until remote pause is observed
-- [ ] Never reprice an accepted order
-- [ ] One supplier stock pool exposed on one channel in V1
-- [ ] Disjoint quota rule enforced
-- [ ] `public quotas + committed units + safety units <= allocated units`
-- [ ] Cash availability also limits public exposure
+- [x] Stable seller SKU
+- [x] Desired vs observed remote state
+- [x] Quantity sync
+- [x] Price sync
+- [x] Emergency pause
+- [x] Pause requires remote acknowledgement — **proven against simulated remote adapter**
+- [x] Exposure/pause state is not confirmed until simulated remote pause is observed
+- [x] Never reprice an accepted order
+- [x] One supplier stock pool exposed on one channel in V1
+- [x] Disjoint quota rule enforced
+- [x] `public quotas + committed units + safety units <= allocated units`
+- [x] Cash availability also limits public exposure
 
 ### Deterministic order state machine
 
-- [ ] RECEIVED
-- [ ] HELD
-- [ ] RESERVED
-- [ ] VALIDATING
-- [ ] AUTHORIZED
-- [ ] PO_INTENT_RECORDED
-- [ ] PO_SUBMITTING
-- [ ] PO_CONFIRMED
-- [ ] PACK_CONFIRMED
-- [ ] HANDOVER_CONFIRMED
-- [ ] IN_TRANSIT
-- [ ] DELIVERED / RTO / LOST / DAMAGED
-- [ ] RECONCILING
-- [ ] MATURED
-- [ ] CUSTOMER_CANCELLED
-- [ ] SUPPLIER_REJECTED
-- [ ] IDENTITY_CONFLICT
-- [ ] PRICE_BREACH
-- [ ] SLA_BREACH
-- [ ] PAYMENT_UNKNOWN
-- [ ] PARTIAL_FULFILMENT
-- [ ] RETURN_OPEN
-- [ ] CLAIM_OPEN
-- [ ] Every exception has owner, deadline, safe next action, and reserved exposure
+- [x] RECEIVED
+- [x] HELD
+- [x] RESERVED
+- [x] VALIDATING
+- [x] AUTHORIZED
+- [x] PO_INTENT_RECORDED
+- [x] PO_SUBMITTING
+- [x] PO_CONFIRMED
+- [x] PACK_CONFIRMED
+- [x] HANDOVER_CONFIRMED
+- [x] IN_TRANSIT
+- [x] DELIVERED / RTO / LOST / DAMAGED
+- [x] RECONCILING
+- [x] MATURED
+- [x] CUSTOMER_CANCELLED
+- [x] SUPPLIER_REJECTED
+- [x] IDENTITY_CONFLICT
+- [x] PRICE_BREACH
+- [x] SLA_BREACH
+- [x] PAYMENT_UNKNOWN
+- [x] PARTIAL_FULFILMENT
+- [x] RETURN_OPEN
+- [x] CLAIM_OPEN
+- [x] Exception schema requires owner/deadline/safe-next-action/exposure flag; PURCHASE_UNKNOWN path validated
 
 ### Procurement safety
 
-- [ ] Re-fetch cancellation/hold before purchase
-- [ ] Short-lived exact spend authorization
-- [ ] Durable PO intent before submission
-- [ ] Provider idempotency key where supported
-- [ ] Unknown purchase result => PURCHASE_UNKNOWN / quarantine
-- [ ] Never blind-retry payment/purchase
-- [ ] Exact client PO reference used for reconciliation
-- [ ] Definitive rejection/no-charge evidence required before a fresh attempt
+- [x] Re-fetch cancellation/hold before purchase
+- [x] Short-lived exact spend authorization
+- [x] Durable PO intent before submission
+- [x] Provider idempotency key where supported
+- [x] Unknown purchase result => PURCHASE_UNKNOWN / quarantine
+- [x] Never blind-retry payment/purchase
+- [x] Exact client PO reference used for reconciliation
+- [ ] Definitive rejection/no-charge evidence required before a fresh attempt — **new-attempt workflow intentionally not enabled yet**
 
 ### Fulfilment
 
-- [ ] Approved supplier/3PL dispatch route only
-- [ ] Seller invoice process established
-- [ ] Pack/barcode scan evidence
-- [ ] Correct marketplace label/manifest
-- [ ] Genuine carrier handover before dispatch confirmation
-- [ ] Inbound tracking never substituted for customer outbound tracking
+- [x] Route verification gate exists in local authorization/simulation
+- [ ] Real approved supplier/3PL dispatch route — **commercial proof pending**
+- [ ] Seller invoice process established — **real supplier/account process pending**
+- [x] Pack/barcode scan evidence
+- [x] Label/tracking identity required by local fulfilment state machine
+- [x] Genuine carrier handover evidence required before dispatch confirmation
+- [x] One customer-outbound tracking identity is persisted; no inbound tracking substitution path exists
 
 ### Returns
 
-- [ ] Marketplace return/refund ingestion
-- [ ] RMA eligibility rules
-- [ ] Return to approved hub
-- [ ] Inspection/grading
-- [ ] Supplier credit/buyback reconciliation
-- [ ] No double refund
-- [ ] Conservative recovery value
+- [x] Local/simulated marketplace return/refund ingestion path
+- [ ] Real marketplace return feed + RMA eligibility rules — **provider/account rules pending**
+- [ ] Real return to approved hub — **commercial route pending**
+- [x] Inspection/grading
+- [x] Supplier recovery/credit can be reconciled as realized recovery
+- [x] No double refund
+- [x] Conservative realized recovery value is separated from forecast reserves
 
 ### Cash controls
 
-- [ ] Reserve cash for committed orders
-- [ ] Reserve cash for outstanding public exposure
-- [ ] Settlement-delay model
-- [ ] Refund/return reserve
-- [ ] Purchase cap
-- [ ] Global pause when liquidity gate fails
+- [x] Reserve cash for committed orders
+- [x] Reserve cash for outstanding public exposure
+- [x] Settlement-delay model
+- [x] Refund/return reserve
+- [x] Purchase cap
+- [x] Global pause when liquidity gate fails
 
 ### V1b validation gate
 
-- [ ] End-to-end sandbox/test-order path passes where supported
+- [x] Local file-backed end-to-end simulated order reaches MATURED and reconciles profit
+- [ ] Marketplace sandbox/test-order path — **real provider access pending**
 - [ ] Small owner-approved real order completes through settlement
 - [ ] Actual fees reconciled against forecast
-- [ ] Return/RTO path tested where practical
-- [ ] Replay/crash tests produce zero duplicate purchase/list/refund/dispatch events
+- [x] Local return/RTO reconciliation paths tested
+- [x] Local replay/fencing/unknown-side-effect tests prevent duplicate purchase and financial events; real-provider crash testing pending
 
 ---
 
@@ -338,74 +341,75 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### Supplier execution
 
-- [ ] Enable only for a supplier with proven idempotency/reconciliation
-- [ ] Exact price/quantity/destination cap
-- [ ] No substitutions
-- [ ] Browser automation only if contractually/permissibly necessary
-- [ ] One mutating browser job at a time per account
-- [ ] OTP/CAPTCHA remains human-assisted
+- [x] Simulated supplier adapter proves idempotency/reconciliation contract
+- [x] Exact price/quantity/destination authorization is persisted and expires
+- [x] No substitution path exists in local purchase payload
+- [ ] Enable real supplier mutation only after supplier idempotency/reconciliation is proven
+- [ ] Browser automation only if contractually/permissibly necessary — **not built because no real need is established**
+- [ ] One mutating browser job at a time per account — **N/A until a permitted browser-only supplier is chosen**
+- [ ] OTP/CAPTCHA remains human-assisted — **N/A until such a provider is chosen**
 
 ### Failure recovery and idempotency
 
-- [ ] Action intent persisted before external side effect
-- [ ] Payload hash
-- [ ] Monotonic state version
-- [ ] Job lease
-- [ ] Fencing token
-- [ ] Process/account mutation lock
-- [ ] SAFE_READ_RETRY
-- [ ] AUTH_REQUIRED
-- [ ] RATE_LIMIT
-- [ ] EXPLICIT_REJECTION
-- [ ] UNKNOWN_SIDE_EFFECT
-- [ ] VALIDATION_FAILURE
-- [ ] POLICY_BLOCK
-- [ ] Restart begins in stop-new-exposure mode
-- [ ] Reconcile unresolved intents before resuming
-- [ ] Crash-injection tests around listing/payment/refund boundaries
+- [x] Action intent persisted before external side effect
+- [x] Payload hash
+- [x] Monotonic state version
+- [x] Job lease
+- [x] Fencing token
+- [x] Process/account mutation lock
+- [x] SAFE_READ_RETRY
+- [x] AUTH_REQUIRED
+- [x] RATE_LIMIT
+- [x] EXPLICIT_REJECTION
+- [x] UNKNOWN_SIDE_EFFECT
+- [x] VALIDATION_FAILURE
+- [x] POLICY_BLOCK
+- [x] Restart begins in stop-new-exposure mode
+- [x] Restart defaults to stop-new-exposure; PURCHASE_UNKNOWN has reconciliation path before normal continuation
+- [ ] Full crash-injection matrix around every external boundary — **purchase unknown/fencing/replay cases covered; real-provider crash injection pending**
 
 ### Monitoring cadences
 
-- [ ] New order / quote expiry: immediate authoritative recheck
-- [ ] Active volatile: 5–10 min where permitted
-- [ ] Active normal: 15–30 min
-- [ ] Stable locked allocation: 30–60 min where safe
-- [ ] Watchlist: 4–6 h
-- [ ] Discovery: daily
-- [ ] Seasonal: weekly beyond 30 days, daily nearer event
-- [ ] Circuit breaker / exponential backoff
-- [ ] Reduce SKU/exposure rather than evade source/platform limits
+- [x] Deterministic cadence policy includes immediate critical recheck
+- [x] Active volatile: 5 min policy
+- [x] Active normal: 15 min policy
+- [x] Stable locked allocation: 30 min policy
+- [x] Watchlist: 4 h policy
+- [x] Discovery: daily policy
+- [x] Seasonal: weekly far / daily near policy
+- [x] Circuit breaker / bounded exponential backoff
+- [x] Architecture pauses/reduces exposure rather than evading source/platform limits
+- [ ] Provider-specific scheduler wiring — **depends on real approved API/source limits**
 
 ### Local runtime
 
-- [ ] Next.js/TypeScript control panel on `127.0.0.1`
-- [ ] Separate Node worker
-- [ ] SQLite jobs table
-- [ ] `launchd` supervision on Mac
-- [ ] Machine kept powered/awake while accepting sales
-- [ ] OS-keychain secrets
-- [ ] Encrypted sensitive files
-- [ ] Encrypted consistent DB backup to a second storage destination
-- [ ] Restore drill tested
+- [x] CLI-first local operator surface — **supersedes planned Next.js control panel per owner decision**
+- [x] Separate Node worker
+- [x] SQLite jobs table
+- [x] `launchd` supervision on Mac
+- [ ] Machine kept powered/awake while accepting real sales — **operator/hardware configuration pending**
+- [x] OS-keychain secrets
+- [x] Sensitive DB backups encrypted with AES-256-GCM; live credentials remain outside repo/Keychain
+- [x] Encrypted consistent DB backup to a second storage destination
+- [x] Restore drill tested
 
-### Local UI
+### Local operator surface
 
-- [ ] Today
-- [ ] Catalogue
-- [ ] Orders & returns
-- [ ] Supply
-- [ ] Money
-- [ ] Research & rules
-- [ ] Global pause-new-sales with pending vs confirmed remote state
-- [ ] No ambiguous “retry everything” button
+- [x] No website/UI by owner decision; CLI is the V1 operator surface
+- [x] Exposure status / pause / resume CLI
+- [x] Research export/import CLI
+- [x] Worker one-shot / supervised loop commands
+- [x] Gate 0 readiness CLI
+- [x] Encrypted backup/integrity CLI
+- [x] No ambiguous “retry everything” command exists
 
 ### ChatGPT research workflow
 
-- [ ] Interactive/batched only in zero-paid-API V1
-- [ ] JSON research inbox/outbox
-- [ ] Schema-validated import
-- [ ] LLM cannot authorize live listing/order/refund actions
-- [ ] Live runtime continues when ChatGPT is unavailable
+- [x] Interactive/batched only in zero-paid-API V1
+- [x] JSON research inbox/outbox
+- [x] Schema-validated import
+- [x] LLM cannot authorize live listing/order/refund actions
+- [x] Live runtime continues when ChatGPT is unavailable
 
 ### V1c validation gate
 
