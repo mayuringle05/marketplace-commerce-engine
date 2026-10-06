@@ -178,6 +178,18 @@ export const MIGRATIONS: readonly Migration[] = [
         ON source_offers(fulfilment_route_id);
     `,
   },
+  {
+    version: 3,
+    name: "v1a_unambiguous_supplier_observation_time",
+    sql: `
+      CREATE UNIQUE INDEX source_offers_observation_identity_idx
+        ON source_offers(
+          supplier_id,
+          supplier_sku,
+          observed_at
+        );
+    `,
+  },
 ];
 
 export function applyMigrations(
