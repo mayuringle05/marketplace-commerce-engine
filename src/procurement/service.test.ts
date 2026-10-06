@@ -71,6 +71,7 @@ test("unknown purchase is quarantined and cannot be blindly resubmitted", () => 
       amountPaise: 35_000,
       quantity: 1,
       destinationKey: "DEST-1",
+      authorizationExpiresAt: "2026-10-07T00:06:00.000Z",
       createdAt: "2026-10-07T00:01:00.000Z",
     });
 
