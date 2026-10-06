@@ -11,7 +11,7 @@
 - [x] Implementation checklist added
 - [x] Repository visibility intentionally **public for now** (owner decision)
 - [ ] Gate 0 commercial feasibility complete
-- [ ] Checkpoint 1 deterministic economics complete — **locked install + format + lint + typecheck + 17/17 tests green in CI; final local owner validation pending**
+- [x] Checkpoint 1 deterministic economics complete — **merged to main; local economics validation passed and full locked CI is green**
 - [ ] V1a observer complete
 - [ ] V1b controlled trading complete
 - [ ] V1c bounded automatic operation complete
@@ -169,14 +169,14 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### Minimum viable SQLite database
 
-- [ ] WAL enabled
-- [ ] Foreign keys enabled
-- [ ] `products`
-- [ ] `product_identifiers`
-- [ ] `suppliers`
-- [ ] `fulfilment_routes`
-- [ ] `source_offers`
-- [ ] `observations`
+- [x] WAL enabled
+- [x] Foreign keys enabled
+- [x] `products`
+- [x] `product_identifiers`
+- [x] `suppliers`
+- [x] `fulfilment_routes`
+- [x] `source_offers`
+- [x] `observations`
 - [ ] `listings`
 - [ ] `opportunities`
 - [ ] `orders`
