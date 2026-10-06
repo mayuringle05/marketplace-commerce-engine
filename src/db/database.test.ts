@@ -322,12 +322,10 @@ test("persists exact integer paise and allocation values", () => {
         available_units: bigint;
       };
 
-    assert.deepEqual(row, {
-      gross_cost_paise: 35_001n,
-      tax_rate_bps: 1_800n,
-      allocated_units: 5n,
-      available_units: 3n,
-    });
+    assert.equal(row.gross_cost_paise, 35_001n);
+    assert.equal(row.tax_rate_bps, 1_800n);
+    assert.equal(row.allocated_units, 5n);
+    assert.equal(row.available_units, 3n);
   } finally {
     database.close();
   }
