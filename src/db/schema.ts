@@ -594,6 +594,44 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 5,
+    name: "local_runtime_cursors_and_locks",
+    sql: `
+      CREATE TABLE marketplace_cursors (
+        marketplace TEXT NOT NULL,
+        stream TEXT NOT NULL,
+        cursor TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (marketplace, stream)
+      ) STRICT;
+
+      CREATE TABLE marketplace_events (
+        id TEXT PRIMARY KEY,
+        marketplace TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        external_event_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        UNIQUE (marketplace, external_event_id)
+      ) STRICT;
+
+      CREATE TABLE runtime_state (
+        state_key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version > 0),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE account_locks (
+        account_scope TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        fencing_token INTEGER NOT NULL CHECK (fencing_token > 0),
+        lease_until TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
 ];
 
 export function applyMigrations(
