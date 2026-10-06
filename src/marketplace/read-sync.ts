@@ -1,0 +1,126 @@
+import type { DatabaseSync } from "node:sqlite";
+
+import { canonicalJson, deterministicId } from "../core/deterministic.ts";
+
+export interface MarketplaceReadEvent {
+  readonly externalEventId: string;
+  readonly eventType: string;
+  readonly payload: unknown;
+  readonly observedAt: string;
+}
+
+export interface MarketplaceReadPage {
+  readonly events: readonly MarketplaceReadEvent[];
+  readonly nextCursor: string | null;
+}
+
+export interface MarketplaceReadSource {
+  fetchPage(cursor: string | null): MarketplaceReadPage;
+}
+
+export interface MarketplaceSyncResult {
+  readonly inserted: number;
+  readonly duplicates: number;
+  readonly finalCursor: string | null;
+}
+
+export function syncMarketplaceReadStream(
+  database: DatabaseSync,
+  marketplace: string,
+  stream: string,
+  source: MarketplaceReadSource,
+  syncedAt: string,
+): MarketplaceSyncResult {
+  const cursorRow = database
+    .prepare(
+      `
+        SELECT cursor
+        FROM marketplace_cursors
+        WHERE marketplace = ?
+          AND stream = ?
+      `,
+    )
+    .get(marketplace, stream) as
+    | { cursor: string | null }
+    | undefined;
+
+  const initialCursor = cursorRow?.cursor ?? null;
+  let cursor = initialCursor;
+  let inserted = 0;
+  let duplicates = 0;
+
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    while (true) {
+      const page = source.fetchPage(cursor);
+
+      for (const event of page.events) {
+        const id = deterministicId(
+          "mpevent",
+          marketplace,
+          event.externalEventId,
+        );
+        const result = database
+          .prepare(
+            `
+              INSERT OR IGNORE INTO marketplace_events (
+                id,
+                marketplace,
+                event_type,
+                external_event_id,
+                payload_json,
+                observed_at
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `,
+          )
+          .run(
+            id,
+            marketplace,
+            event.eventType,
+            event.externalEventId,
+            canonicalJson(event.payload),
+            event.observedAt,
+          );
+
+        if (result.changes === 1n) {
+          inserted += 1;
+        } else {
+          duplicates += 1;
+        }
+      }
+
+      cursor = page.nextCursor;
+
+      if (page.nextCursor === null) {
+        break;
+      }
+    }
+
+    database
+      .prepare(
+        `
+          INSERT INTO marketplace_cursors (
+            marketplace,
+            stream,
+            cursor,
+            updated_at
+          ) VALUES (?, ?, ?, ?)
+          ON CONFLICT(marketplace, stream) DO UPDATE SET
+            cursor = excluded.cursor,
+            updated_at = excluded.updated_at
+        `,
+      )
+      .run(marketplace, stream, cursor, syncedAt);
+
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+
+  return {
+    inserted,
+    duplicates,
+    finalCursor: cursor,
+  };
+}
