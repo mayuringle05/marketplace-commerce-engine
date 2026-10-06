@@ -651,6 +651,127 @@ export const MIGRATIONS: readonly Migration[] = [
         ADD COLUMN physical_verified_at TEXT;
     `,
   },
+  {
+    version: 8,
+    name: "operational_immutability_guards",
+    sql: `
+      CREATE TRIGGER orders_state_insert_guard
+      BEFORE INSERT ON orders
+      WHEN NEW.state NOT IN (
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}'
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid order state');
+      END;
+
+      CREATE TRIGGER orders_state_update_guard
+      BEFORE UPDATE OF state ON orders
+      WHEN NEW.state NOT IN (
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}',
+            '${s}'
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid order state');
+      END;
+
+      CREATE TRIGGER orders_economics_immutable
+      BEFORE UPDATE OF immutable_economics_json ON orders
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable order economics');
+      END;
+
+      CREATE TRIGGER ledger_entries_no_update
+      BEFORE UPDATE ON ledger_entries
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable ledger entry');
+      END;
+
+      CREATE TRIGGER ledger_entries_no_delete
+      BEFORE DELETE ON ledger_entries
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable ledger entry');
+      END;
+
+      CREATE TRIGGER audit_events_no_update
+      BEFORE UPDATE ON audit_events
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable audit event');
+      END;
+
+      CREATE TRIGGER audit_events_no_delete
+      BEFORE DELETE ON audit_events
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable audit event');
+      END;
+
+      CREATE TRIGGER source_offers_no_update
+      BEFORE UPDATE ON source_offers
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable source offer');
+      END;
+
+      CREATE TRIGGER source_offers_no_delete
+      BEFORE DELETE ON source_offers
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable source offer');
+      END;
+
+      CREATE TRIGGER order_items_no_update
+      BEFORE UPDATE ON order_items
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable order item');
+      END;
+    `,
+  },
 ];
 
 export function applyMigrations(
