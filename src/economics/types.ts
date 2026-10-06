@@ -18,7 +18,16 @@ export interface KeptOutcome {
 export interface NonKeptOutcome {
   readonly kind: Exclude<OutcomeKind, "kept">;
   readonly probabilityPpm: number;
-  readonly contributionPaise: Paise;
+  /**
+   * All economic cost attributable to this mutually exclusive outcome.
+   * Must be non-negative.
+   */
+  readonly costPaise: Paise;
+  /**
+   * Conservative recovery attributable to this same outcome.
+   * Must be non-negative and must not be booked elsewhere.
+   */
+  readonly recoveryPaise: Paise;
 }
 
 export type Outcome = KeptOutcome | NonKeptOutcome;
@@ -29,8 +38,20 @@ export interface SupplierCost {
   readonly recoverableTax: boolean;
 }
 
+export type EconomicCostKind =
+  | "marketplace_fee"
+  | "outbound_shipping"
+  | "packing_handling"
+  | "other";
+
 export interface EconomicCostComponent {
   readonly id: string;
+  readonly kind: EconomicCostKind;
+  /**
+   * Version/date/hash of the rate source or internal cost rule.
+   * A marketplace fee must never be an unversioned hard-coded percentage.
+   */
+  readonly sourceVersion: string;
   readonly netPaise: Paise;
   readonly cashTaxRateBps: number;
   readonly stressEligible: boolean;
@@ -55,6 +76,14 @@ export interface EvidenceCompleteness {
   readonly billableWeightAndZoneKnown: boolean;
 }
 
+export interface CashRisk {
+  /**
+   * Cash deliberately available to absorb one complete order loss.
+   * This is checked separately from expected-value profitability.
+   */
+  readonly availableSingleOrderLossReservePaise: Paise;
+}
+
 export interface EconomicScenario {
   readonly customerPriceGrossPaise: Paise;
   readonly outputTaxRateBps: number;
@@ -64,6 +93,7 @@ export interface EconomicScenario {
   readonly buffers: DecisionBuffers;
   readonly gates: MoneyGates;
   readonly evidence: EvidenceCompleteness;
+  readonly cashRisk: CashRisk;
 }
 
 export type EconomicsStatus = "PASS" | "WATCH" | "REJECT";
@@ -72,6 +102,7 @@ export type EconomicsReason =
   | "DECISION_PROFIT_BELOW_MINIMUM"
   | "DECISION_MARGIN_BELOW_MINIMUM"
   | "CASH_ROI_BELOW_MINIMUM"
+  | "COMPLETE_LOSS_RESERVE_INSUFFICIENT"
   | "MATERIAL_FEES_UNKNOWN"
   | "TAX_TREATMENT_UNKNOWN"
   | "BILLABLE_WEIGHT_OR_ZONE_UNKNOWN"
@@ -89,6 +120,7 @@ export interface BaseEconomicsResult {
   readonly decisionProfitPaise: Paise;
   readonly decisionMarginBps: number;
   readonly peakCashRequirementPaise: Paise;
+  readonly completeLossExposurePaise: Paise;
   readonly cashRoiBps: number;
   readonly outcomeContributionPaise: Readonly<Record<OutcomeKind, Paise | null>>;
 }
