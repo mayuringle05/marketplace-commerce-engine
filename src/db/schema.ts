@@ -643,6 +643,14 @@ export const MIGRATIONS: readonly Migration[] = [
         ADD COLUMN authorization_expires_at TEXT;
     `,
   },
+  {
+    version: 7,
+    name: "physical_identity_verification",
+    sql: `
+      ALTER TABLE packaged_trade_units
+        ADD COLUMN physical_verified_at TEXT;
+    `,
+  },
 ];
 
 export function applyMigrations(
