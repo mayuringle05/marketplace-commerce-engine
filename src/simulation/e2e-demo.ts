@@ -174,8 +174,9 @@ function seedCommercialFixture(database: DatabaseSync): void {
           mapping_status,
           invalidation_reason,
           created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, 1, 'new', 'IN', 'GTIN13', ?, 1, 'APPROVED', NULL, ?, ?)
+          updated_at,
+          physical_verified_at
+        ) VALUES (?, ?, ?, ?, 1, 'new', 'IN', 'GTIN13', ?, 1, 'APPROVED', NULL, ?, ?, ?)
       `,
     )
     .run(
@@ -186,6 +187,7 @@ function seedCommercialFixture(database: DatabaseSync): void {
       "4006381333931",
       T0,
       T0,
+      "2026-10-07T00:06:00.000Z",
     );
 
   database
