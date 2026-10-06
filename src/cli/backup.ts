@@ -1,4 +1,5 @@
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 
 import { openDatabase } from "../db/database.ts";
 import {
@@ -17,6 +18,8 @@ const outputPath =
 const keyHex =
   process.env.COSMO_BACKUP_KEY_HEX ??
   readMacKeychainSecret("cosmo-commerce", "backup-key");
+
+mkdirSync(dirname(outputPath), { recursive: true });
 
 const snapshotPath = `${outputPath}.plain.tmp`;
 const verifyPath = `${outputPath}.verify.tmp`;
