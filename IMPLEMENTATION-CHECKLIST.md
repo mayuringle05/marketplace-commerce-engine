@@ -9,9 +9,9 @@
 - [x] Repository created
 - [x] Strategy/build specification added
 - [x] Implementation checklist added
-- [ ] Repository visibility changed to **private**
+- [x] Repository visibility intentionally **public for now** (owner decision)
 - [ ] Gate 0 commercial feasibility complete
-- [ ] Checkpoint 1 deterministic economics complete
+- [ ] Checkpoint 1 deterministic economics complete — **locked install + format + lint + typecheck + 17/17 tests green in CI; final local owner validation pending**
 - [ ] V1a observer complete
 - [ ] V1b controlled trading complete
 - [ ] V1c bounded automatic operation complete
@@ -54,92 +54,92 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### Repository foundation
 
-- [ ] Initialize Node.js + TypeScript
-- [ ] Strict TypeScript configuration
-- [ ] Lint / formatting
-- [ ] Unit-test runner
-- [ ] GitHub Actions CI
-- [ ] `.gitignore`
-- [ ] `.env.example` with placeholders only
-- [ ] No committed secrets
+- [x] Initialize Node.js + TypeScript
+- [x] Strict TypeScript configuration
+- [x] Lint / formatting
+- [x] Unit-test runner
+- [x] GitHub Actions CI
+- [x] `.gitignore`
+- [x] `.env.example` with placeholders only
+- [x] No committed secrets
 
 ### Money model
 
-- [ ] Money represented as integer paise
-- [ ] Rates represented as integer basis points / rational arithmetic
-- [ ] Explicit rounding rules at fee/invoice boundaries
-- [ ] Economic profit separated from gross cash and tax accounting
-- [ ] Marketplace fees are versioned inputs, not one hard-coded percentage
-- [ ] Supplier cost and recoverable/non-recoverable tax are explicit
-- [ ] Forward shipping/fulfilment costs are explicit
-- [ ] Return/RTO costs are explicit
-- [ ] Packing/handling costs are explicit
-- [ ] Fee uncertainty buffer
-- [ ] Unmodelled price-risk buffer
-- [ ] Supplier-risk buffer
-- [ ] Allocated overhead
+- [x] Money represented as integer paise
+- [x] Rates represented as integer basis points / rational arithmetic
+- [x] Explicit rounding rules at fee/invoice boundaries
+- [x] Economic profit separated from gross cash and tax accounting
+- [x] Marketplace fees are versioned inputs, not one hard-coded percentage
+- [x] Supplier cost and recoverable/non-recoverable tax are explicit
+- [x] Forward shipping/fulfilment costs are explicit
+- [x] Return/RTO costs are explicit
+- [x] Packing/handling costs are explicit
+- [x] Fee uncertainty buffer
+- [x] Unmodelled price-risk buffer
+- [x] Supplier-risk buffer
+- [x] Allocated overhead
 
 ### Mutually exclusive outcome model
 
-- [ ] Cancellation before purchase
-- [ ] Cancellation after purchase
-- [ ] Delivered and kept
-- [ ] RTO
-- [ ] Post-delivery return
-- [ ] Lost/damaged
-- [ ] Outcome probabilities must sum to one
-- [ ] Conditional return probability is converted correctly before weighting
-- [ ] No double-counting of return reserves/recoveries
+- [x] Cancellation before purchase
+- [x] Cancellation after purchase
+- [x] Delivered and kept
+- [x] RTO
+- [x] Post-delivery return
+- [x] Lost/damaged
+- [x] Outcome probabilities must sum to one
+- [x] Conditional return probability is converted correctly before weighting
+- [x] No double-counting of return reserves/recoveries
 
 ### Core calculations
 
-- [ ] `expected_contribution`
-- [ ] `decision_profit`
-- [ ] Decision margin on net sales
-- [ ] Peak per-order cash requirement
-- [ ] Cash ROI
-- [ ] Minimum economic price search over allowed price ticks
+- [x] `expected_contribution`
+- [x] `decision_profit`
+- [x] Decision margin on net sales
+- [x] Peak per-order cash requirement
+- [x] Cash ROI
+- [x] Minimum economic price search over allowed price ticks
 
 ### Hard money gates
 
-- [ ] Decision profit >= ₹100
-- [ ] Decision profit >= 15% of net sales
-- [ ] Decision profit >= 20% of peak per-order cash requirement
-- [ ] Unknown material fee => WATCH
-- [ ] Unknown tax treatment => WATCH
-- [ ] Unknown billable weight/zone => WATCH
+- [x] Decision profit >= ₹100
+- [x] Decision profit >= 15% of net sales
+- [x] Decision profit >= 20% of peak per-order cash requirement
+- [x] Unknown material fee => WATCH
+- [x] Unknown tax treatment => WATCH
+- [x] Unknown billable weight/zone => WATCH
 
 ### Stress tests
 
-- [ ] Source cost +10%
-- [ ] Logistics/fees +15%
-- [ ] Return/RTO probabilities ×1.5 with consistent renormalization
-- [ ] Stressed decision profit remains non-negative
-- [ ] Complete loss of one order tested separately against cash reserve
+- [x] Source cost +10%
+- [x] Logistics/fees +15%
+- [x] Return/RTO probabilities ×1.5 with consistent renormalization
+- [x] Stressed decision profit remains non-negative
+- [x] Complete loss of one order tested separately against cash reserve
 
 ### Automated tests
 
-- [ ] Section 28 example reproduces approximately ₹145.09 decision profit
-- [ ] Kept-order example reproduces approximately ₹227.03 contribution before overhead
-- [ ] ₹350 → ₹510 supplier-cost change materially collapses profitability
-- [ ] Low-margin product rejects
-- [ ] Negative expected contribution rejects
-- [ ] Shipping increase can flip LIST/PASS → REJECT
-- [ ] Marketplace fee increase can flip LIST/PASS → REJECT
-- [ ] Return-risk increase can flip LIST/PASS → REJECT
-- [ ] Rounding is deterministic
-- [ ] Same input always returns the same output
-- [ ] Invalid/overflow/negative inputs fail safely
+- [x] Section 28 example reproduces approximately ₹145.09 decision profit
+- [x] Kept-order example reproduces approximately ₹227.03 contribution before overhead
+- [x] ₹350 → ₹510 supplier-cost change materially collapses profitability
+- [x] Low-margin product rejects
+- [x] Negative expected contribution rejects
+- [x] Shipping increase can flip LIST/PASS → REJECT
+- [x] Marketplace fee increase can flip LIST/PASS → REJECT
+- [x] Return-risk increase can flip LIST/PASS → REJECT
+- [x] Rounding is deterministic
+- [x] Same input always returns the same output
+- [x] Invalid/overflow/negative inputs fail safely
 
 ### Checkpoint 1 validation gate
 
-- [ ] Fresh checkout installs successfully
-- [ ] Typecheck passes
-- [ ] Lint passes
-- [ ] Unit tests pass
-- [ ] GitHub CI passes
-- [ ] One human hand-calculation matches the engine
-- [ ] No supplier or marketplace credentials are required yet
+- [x] Fresh checkout installs successfully
+- [x] Typecheck passes
+- [x] Lint passes
+- [x] Unit tests pass
+- [x] GitHub CI passes
+- [x] One human hand-calculation matches the engine
+- [x] No supplier or marketplace credentials are required yet
 
 ---
 

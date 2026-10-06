@@ -1,0 +1,21 @@
+{
+  "name": "marketplace-commerce-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-only deterministic commerce engine for COSMO COMMERCE.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "format:check": "node scripts/verify-source.mjs format",
+    "lint": "node scripts/verify-source.mjs lint",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test src/economics/engine.test.ts",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "typescript": "7.0.2"
+  }
+}

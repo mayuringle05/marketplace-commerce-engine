@@ -1,0 +1,33 @@
+name: checkpoint-1-ci
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  economics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: npm
+
+      - name: Install locked development dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify source, typecheck, and test
+        run: npm run check
