@@ -307,6 +307,8 @@ export function evaluateBaseScenario(
     reasons.push("CASH_ROI_BELOW_MINIMUM");
   }
 
+  const pricingGatesPassed = reasons.length === 0;
+
   if (
     compare(
       fromPaise(
@@ -342,6 +344,7 @@ export function evaluateBaseScenario(
   return {
     status,
     reasons,
+    pricingGatesPassed,
     moneyGatesPassed,
     netSalesPaise: toPaise(netSales),
     supplierEconomicCostPaise: toPaise(supplierCost),
@@ -502,7 +505,7 @@ export function findMinimumGrossPriceForBaseMoneyGates(
       customerPriceGrossPaise: asPaise(price),
     });
 
-    if (result.moneyGatesPassed) {
+    if (result.pricingGatesPassed) {
       return asPaise(price);
     }
   }
