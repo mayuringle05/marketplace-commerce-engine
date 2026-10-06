@@ -64,7 +64,7 @@ export function ingestMarketplaceOrder(
 
   database.exec("BEGIN IMMEDIATE");
   try {
-    database
+    const orderInsert = database
       .prepare(
         `
           INSERT INTO orders (
@@ -110,6 +110,78 @@ export function ingestMarketplaceOrder(
         event.quantity,
         event.acceptedPricePaise,
       );
+
+    if (orderInsert.changes === 1n) {
+      const quantity = BigInt(event.quantity);
+
+      const localQuantity = database
+        .prepare(
+          `
+            SELECT observed_quantity
+            FROM listings
+            WHERE id = ?
+          `,
+        )
+        .get(listing.id) as {
+        observed_quantity: bigint | null;
+      };
+
+      if (
+        localQuantity.observed_quantity === null ||
+        localQuantity.observed_quantity < quantity
+      ) {
+        throw new Error(
+          "Accepted order exceeds observed public listing quantity.",
+        );
+      }
+
+      const remaining = localQuantity.observed_quantity - quantity;
+      const state = remaining === 0n ? "PAUSED" : "ACTIVE";
+
+      database
+        .prepare(
+          `
+            UPDATE listings
+            SET
+              desired_quantity = ?,
+              observed_quantity = ?,
+              desired_state = ?,
+              observed_state = ?,
+              version = version + 1,
+              updated_at = ?
+            WHERE id = ?
+          `,
+        )
+        .run(
+          remaining,
+          remaining,
+          state,
+          state,
+          event.receivedAt,
+          listing.id,
+        );
+
+      database
+        .prepare(
+          `
+            UPDATE simulated_marketplace_listings
+            SET
+              quantity = ?,
+              state = ?,
+              remote_version = remote_version + 1,
+              updated_at = ?
+            WHERE marketplace = ?
+              AND seller_sku = ?
+          `,
+        )
+        .run(
+          remaining,
+          state,
+          event.receivedAt,
+          event.marketplace,
+          event.sellerSku,
+        );
+    }
 
     database.exec("COMMIT");
   } catch (error) {
