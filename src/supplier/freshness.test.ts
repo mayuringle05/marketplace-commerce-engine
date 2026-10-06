@@ -188,7 +188,9 @@ test("offer beyond maximum age becomes stale and unavailable", () => {
 test("not-yet-valid, expired, out-of-stock, and missing offers block exposure", () => {
   assert.equal(
     evaluateOfferFreshness(
-      snapshot(),
+      snapshot({
+        observedAt: "2026-10-06T23:55:00.000Z",
+      }),
       "2026-10-06T23:59:59.000Z",
       { maximumObservationAgeSeconds: 10_000 },
     ).state,
