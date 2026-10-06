@@ -147,11 +147,11 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### Supplier import
 
-- [ ] Implement exactly one supplier adapter first
-- [ ] Prefer agreed API or CSV/JSON
-- [ ] Preserve source timestamp/version
-- [ ] Persist price, tax, allocation, validity, package data, dispatch location
-- [ ] Idempotent import
+- [x] Implement exactly one supplier adapter first
+- [x] Prefer agreed API or CSV/JSON
+- [x] Preserve source timestamp/version
+- [x] Persist price, tax, allocation, validity, package data, dispatch location
+- [x] Idempotent import
 - [ ] Stale source becomes UNKNOWN/unavailable for new exposure
 
 ### Canonical product identity

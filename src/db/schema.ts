@@ -142,6 +142,42 @@ export const MIGRATIONS: readonly Migration[] = [
         ON observations(subject_type, subject_id, observed_at);
     `,
   },
+  {
+    version: 2,
+    name: "v1a_supplier_offer_package_and_route",
+    sql: `
+      ALTER TABLE source_offers
+        ADD COLUMN fulfilment_route_id TEXT
+          REFERENCES fulfilment_routes(id) ON DELETE RESTRICT;
+
+      ALTER TABLE source_offers
+        ADD COLUMN packed_weight_grams INTEGER
+          CHECK (
+            packed_weight_grams IS NULL OR packed_weight_grams > 0
+          );
+
+      ALTER TABLE source_offers
+        ADD COLUMN package_length_mm INTEGER
+          CHECK (
+            package_length_mm IS NULL OR package_length_mm > 0
+          );
+
+      ALTER TABLE source_offers
+        ADD COLUMN package_width_mm INTEGER
+          CHECK (
+            package_width_mm IS NULL OR package_width_mm > 0
+          );
+
+      ALTER TABLE source_offers
+        ADD COLUMN package_height_mm INTEGER
+          CHECK (
+            package_height_mm IS NULL OR package_height_mm > 0
+          );
+
+      CREATE INDEX source_offers_route_idx
+        ON source_offers(fulfilment_route_id);
+    `,
+  },
 ];
 
 export function applyMigrations(
