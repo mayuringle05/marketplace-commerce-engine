@@ -11,7 +11,7 @@
 - [x] Implementation checklist added
 - [x] Repository visibility intentionally **public for now** (owner decision)
 - [ ] Gate 0 commercial feasibility complete
-- [ ] Checkpoint 1 deterministic economics complete — **core CI green; local owner validation + remaining hardening tests pending**
+- [ ] Checkpoint 1 deterministic economics complete — **17/17 hardening tests green in CI; revised local owner validation + lint/format pending**
 - [ ] V1a observer complete
 - [ ] V1b controlled trading complete
 - [ ] V1c bounded automatic operation complete
@@ -69,10 +69,10 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] Rates represented as integer basis points / rational arithmetic
 - [x] Explicit rounding rules at fee/invoice boundaries
 - [x] Economic profit separated from gross cash and tax accounting
-- [ ] Marketplace fees are versioned inputs, not one hard-coded percentage
+- [x] Marketplace fees are versioned inputs, not one hard-coded percentage
 - [x] Supplier cost and recoverable/non-recoverable tax are explicit
-- [ ] Forward shipping/fulfilment costs are explicit
-- [ ] Return/RTO costs are explicit
+- [x] Forward shipping/fulfilment costs are explicit
+- [x] Return/RTO costs are explicit
 - [x] Packing/handling costs are explicit
 - [x] Fee uncertainty buffer
 - [x] Unmodelled price-risk buffer
@@ -88,8 +88,8 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] Post-delivery return
 - [x] Lost/damaged
 - [x] Outcome probabilities must sum to one
-- [ ] Conditional return probability is converted correctly before weighting
-- [ ] No double-counting of return reserves/recoveries
+- [x] Conditional return probability is converted correctly before weighting
+- [x] No double-counting of return reserves/recoveries
 
 ### Core calculations
 
@@ -115,21 +115,21 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] Logistics/fees +15%
 - [x] Return/RTO probabilities ×1.5 with consistent renormalization
 - [x] Stressed decision profit remains non-negative
-- [ ] Complete loss of one order tested separately against cash reserve
+- [x] Complete loss of one order tested separately against cash reserve
 
 ### Automated tests
 
 - [x] Section 28 example reproduces approximately ₹145.09 decision profit
 - [x] Kept-order example reproduces approximately ₹227.03 contribution before overhead
 - [x] ₹350 → ₹510 supplier-cost change materially collapses profitability
-- [ ] Low-margin product rejects
-- [ ] Negative expected contribution rejects
-- [ ] Shipping increase can flip LIST/PASS → REJECT
-- [ ] Marketplace fee increase can flip LIST/PASS → REJECT
+- [x] Low-margin product rejects
+- [x] Negative expected contribution rejects
+- [x] Shipping increase can flip LIST/PASS → REJECT
+- [x] Marketplace fee increase can flip LIST/PASS → REJECT
 - [x] Return-risk increase can flip LIST/PASS → REJECT
-- [ ] Rounding is deterministic
+- [x] Rounding is deterministic
 - [x] Same input always returns the same output
-- [ ] Invalid/overflow/negative inputs fail safely
+- [x] Invalid/overflow/negative inputs fail safely
 
 ### Checkpoint 1 validation gate
 
