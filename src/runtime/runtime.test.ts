@@ -25,7 +25,9 @@ import {
   leaseNextDueJob,
 } from "../core/jobs.ts";
 import {
+  MarketplaceRateLimitError,
   syncMarketplaceReadStream,
+  syncMarketplaceReadStreamWithRetry,
   type MarketplaceReadSource,
 } from "../marketplace/read-sync.ts";
 import {
@@ -173,6 +175,7 @@ test("marketplace cursor advances only after every page succeeds", () => {
   try {
     let call = 0;
     const source: MarketplaceReadSource = {
+      approvedAccess: true,
       fetchPage(cursor) {
         call += 1;
         if (call === 1) {
@@ -223,6 +226,7 @@ test("marketplace cursor advances only after every page succeeds", () => {
     assert.equal(cursorCount.count, 0n);
 
     const success: MarketplaceReadSource = {
+      approvedAccess: true,
       fetchPage(cursor) {
         if (cursor === null) {
           return {
@@ -340,5 +344,90 @@ test("ChatGPT handoff is file-based research only and imports unapproved", () =>
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("marketplace read rejects unapproved automated access", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    const source: MarketplaceReadSource = {
+      approvedAccess: false,
+      fetchPage() {
+        return {
+          events: [],
+          nextCursor: null,
+          checkpointCursor: "never",
+        };
+      },
+    };
+
+    assert.throws(
+      () =>
+        syncMarketplaceReadStream(
+          database,
+          "SIM",
+          "orders",
+          source,
+          T0,
+        ),
+      /not approved for automated access/,
+    );
+  } finally {
+    database.close();
+  }
+});
+
+test("marketplace read honors Retry-After for safe reads", async () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+  const slept: number[] = [];
+  let calls = 0;
+
+  try {
+    const source: MarketplaceReadSource = {
+      approvedAccess: true,
+      fetchPage() {
+        calls += 1;
+        if (calls === 1) {
+          throw new MarketplaceRateLimitError(3);
+        }
+
+        return {
+          events: [
+            {
+              externalEventId: "evt-retry-1",
+              eventType: "ORDER",
+              payload: { order: 1 },
+              observedAt: T0,
+            },
+          ],
+          nextCursor: null,
+          checkpointCursor: "checkpoint-retry",
+        };
+      },
+    };
+
+    const result = await syncMarketplaceReadStreamWithRetry(
+      database,
+      "SIM",
+      "orders",
+      source,
+      "2026-10-07T00:05:00.000Z",
+      2,
+      async (milliseconds) => {
+        slept.push(milliseconds);
+      },
+    );
+
+    assert.equal(calls, 2);
+    assert.deepEqual(slept, [3_000]);
+    assert.equal(result.inserted, 1);
+    assert.equal(result.finalCursor, "checkpoint-retry");
+  } finally {
+    database.close();
   }
 });
