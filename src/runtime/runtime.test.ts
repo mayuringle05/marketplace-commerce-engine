@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -313,8 +318,7 @@ test("ChatGPT handoff is file-based research only and imports unapproved", () =>
       rationale: "Check exact fees and supplier SLA before approval.",
     };
     const json = JSON.stringify(decision);
-    const fs = await import("node:fs");
-    fs.writeFileSync(decisionPath, json, "utf8");
+    writeFileSync(decisionPath, json, "utf8");
 
     const id = importChatGptDecisionFile(
       database,
