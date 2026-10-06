@@ -632,6 +632,17 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 6,
+    name: "v1_exposure_and_spend_authorization",
+    sql: `
+      CREATE UNIQUE INDEX listings_single_source_pool_idx
+        ON listings(source_offer_id);
+
+      ALTER TABLE purchase_orders
+        ADD COLUMN authorization_expires_at TEXT;
+    `,
+  },
 ];
 
 export function applyMigrations(
