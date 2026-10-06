@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { openDatabase } from "./database.ts";
+import { applyMigrations } from "./schema.ts";
 
 const TEST_TIMESTAMP = "2026-10-06T18:30:00.000Z";
 
@@ -64,34 +65,15 @@ test("applies the V1a migration exactly once", () => {
   });
 
   try {
-    const first = database
+    applyMigrations(database, TEST_TIMESTAMP);
+
+    const row = database
       .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
       .get() as { count: bigint };
 
-    assert.equal(first.count, 1n);
-
+    assert.equal(row.count, 1n);
+  } finally {
     database.close();
-
-    const second = openDatabase(":memory:", {
-      appliedAt: TEST_TIMESTAMP,
-    });
-
-    try {
-      const row = second
-        .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
-        .get() as { count: bigint };
-
-      assert.equal(row.count, 1n);
-    } finally {
-      second.close();
-    }
-  } catch (error) {
-    try {
-      database.close();
-    } catch {
-      // The connection may already be closed by the test path.
-    }
-    throw error;
   }
 });
 
