@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   canonicalJson,
   deterministicId,
+  sha256Hex,
 } from "../core/deterministic.ts";
 
 export interface MarketplaceOrderEvent {
@@ -21,19 +22,19 @@ interface ListingRow {
   readonly marketplace_catalogue_item_id: string;
   readonly supply_pool_id: string | null;
   readonly observed_quantity: bigint | null;
-  readonly desired_price_paise: bigint;
 }
 
-function openOversellException(
+function openOrderException(
   database: DatabaseSync,
   orderId: string,
+  exceptionType: string,
   reason: string,
   at: string,
 ): void {
   const id = deterministicId(
     "exception",
     orderId,
-    "ACCEPTED_ORDER_CAPACITY_MISMATCH",
+    exceptionType,
   );
 
   database
@@ -50,27 +51,57 @@ function openOversellException(
           state,
           created_at,
           resolved_at
-        ) VALUES (
-          ?, ?,
-          'ACCEPTED_ORDER_CAPACITY_MISMATCH',
-          'OWNER',
-          ?,
-          ?,
-          1,
-          'OPEN',
-          ?,
-          NULL
-        )
+        ) VALUES (?, ?, ?, 'OWNER', ?, ?, 1, 'OPEN', ?, NULL)
         ON CONFLICT(id) DO NOTHING
       `,
     )
     .run(
       id,
       orderId,
+      exceptionType,
       at,
       reason,
       at,
     );
+}
+
+function pauseListingLocallyAndRemotely(
+  database: DatabaseSync,
+  listingId: string,
+  marketplace: string,
+  sellerSku: string,
+  at: string,
+): void {
+  database
+    .prepare(
+      `
+        UPDATE listings
+        SET
+          desired_quantity = 0,
+          observed_quantity = 0,
+          desired_state = 'PAUSED',
+          observed_state = 'PAUSED',
+          version = version + 1,
+          updated_at = ?
+        WHERE id = ?
+      `,
+    )
+    .run(at, listingId);
+
+  database
+    .prepare(
+      `
+        UPDATE simulated_marketplace_listings
+        SET
+          quantity = 0,
+          state = 'PAUSED',
+          remote_version = remote_version + 1,
+          updated_at = ?
+        WHERE marketplace = ?
+          AND seller_sku = ?
+      `,
+    )
+    .run(at, marketplace, sellerSku);
 }
 
 export function ingestMarketplaceOrder(
@@ -96,8 +127,7 @@ export function ingestMarketplaceOrder(
           id,
           marketplace_catalogue_item_id,
           supply_pool_id,
-          observed_quantity,
-          desired_price_paise
+          observed_quantity
         FROM listings
         WHERE marketplace = ?
           AND seller_sku = ?
@@ -139,7 +169,25 @@ export function ingestMarketplaceOrder(
     orderId,
     event.marketplaceItemId,
   );
+  const obligationId = deterministicId(
+    "obligation",
+    orderId,
+    event.marketplaceItemId,
+  );
   const economicsJson = canonicalJson(event.economicsSnapshot);
+  const itemPayloadHash = sha256Hex(
+    canonicalJson({
+      marketplace: event.marketplace,
+      marketplaceOrderId: event.marketplaceOrderId,
+      marketplaceItemId: event.marketplaceItemId,
+      sellerSku: event.sellerSku,
+      listingId: listing.id,
+      tradeUnitId: tradeUnit.trade_unit_id,
+      supplyPoolId: listing.supply_pool_id,
+      quantity: event.quantity,
+      acceptedPricePaise: event.acceptedPricePaise,
+    }),
+  );
 
   database.exec("BEGIN IMMEDIATE");
   try {
@@ -214,40 +262,89 @@ export function ingestMarketplaceOrder(
         );
     }
 
-    const existingItem = database
+    const existingObligation = database
       .prepare(
         `
-          SELECT
-            listing_id,
-            trade_unit_id,
-            quantity,
-            accepted_price_paise
-          FROM order_items
+          SELECT payload_hash
+          FROM marketplace_order_obligations
           WHERE order_id = ?
             AND marketplace_item_id = ?
         `,
       )
       .get(orderId, event.marketplaceItemId) as
-      | {
-          listing_id: string;
-          trade_unit_id: string;
-          quantity: bigint;
-          accepted_price_paise: bigint;
-        }
+      | { payload_hash: string }
       | undefined;
 
-    if (existingItem !== undefined) {
-      if (
-        existingItem.listing_id !== listing.id ||
-        existingItem.trade_unit_id !== tradeUnit.trade_unit_id ||
-        existingItem.quantity !== BigInt(event.quantity) ||
-        existingItem.accepted_price_paise !==
-          BigInt(event.acceptedPricePaise)
-      ) {
+    if (existingObligation !== undefined) {
+      if (existingObligation.payload_hash !== itemPayloadHash) {
         throw new Error(
           "Conflicting replay for marketplace order item.",
         );
       }
+      database.exec("COMMIT");
+      return orderId;
+    }
+
+    const sameListingItem = database
+      .prepare(
+        `
+          SELECT id
+          FROM order_items
+          WHERE order_id = ?
+            AND listing_id = ?
+          LIMIT 1
+        `,
+      )
+      .get(orderId, listing.id) as { id: string } | undefined;
+
+    if (sameListingItem !== undefined) {
+      database
+        .prepare(
+          `
+            INSERT INTO marketplace_order_obligations (
+              id,
+              order_id,
+              marketplace_item_id,
+              seller_sku,
+              supply_pool_id,
+              quantity,
+              accepted_price_paise,
+              payload_hash,
+              state,
+              order_item_id,
+              created_at
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?,
+              'HELD_MULTI_ITEM', NULL, ?
+            )
+          `,
+        )
+        .run(
+          obligationId,
+          orderId,
+          event.marketplaceItemId,
+          event.sellerSku,
+          listing.supply_pool_id,
+          event.quantity,
+          event.acceptedPricePaise,
+          itemPayloadHash,
+          event.receivedAt,
+        );
+
+      pauseListingLocallyAndRemotely(
+        database,
+        listing.id,
+        event.marketplace,
+        event.sellerSku,
+        event.receivedAt,
+      );
+      openOrderException(
+        database,
+        orderId,
+        "UNSUPPORTED_MULTI_ITEM_ORDER",
+        "A second marketplace item for the same seller SKU was accepted. Preserve both obligations, keep exposure paused, and require explicit owner handling before procurement.",
+        event.receivedAt,
+      );
 
       database.exec("COMMIT");
       return orderId;
@@ -280,6 +377,37 @@ export function ingestMarketplaceOrder(
     database
       .prepare(
         `
+          INSERT INTO marketplace_order_obligations (
+            id,
+            order_id,
+            marketplace_item_id,
+            seller_sku,
+            supply_pool_id,
+            quantity,
+            accepted_price_paise,
+            payload_hash,
+            state,
+            order_item_id,
+            created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MAPPED', ?, ?)
+        `,
+      )
+      .run(
+        obligationId,
+        orderId,
+        event.marketplaceItemId,
+        event.sellerSku,
+        listing.supply_pool_id,
+        event.quantity,
+        event.acceptedPricePaise,
+        itemPayloadHash,
+        itemId,
+        event.receivedAt,
+      );
+
+    database
+      .prepare(
+        `
           INSERT INTO stock_commitments (
             order_item_id,
             supply_pool_id,
@@ -300,9 +428,8 @@ export function ingestMarketplaceOrder(
 
     const quantity = BigInt(event.quantity);
     const observed = listing.observed_quantity ?? 0n;
-    const remaining = observed > quantity
-      ? observed - quantity
-      : 0n;
+    const remaining =
+      observed > quantity ? observed - quantity : 0n;
     const listingState =
       remaining === 0n ? "PAUSED" : "ACTIVE";
 
@@ -370,13 +497,31 @@ export function ingestMarketplaceOrder(
     const committed = database
       .prepare(
         `
-          SELECT COALESCE(SUM(units), 0) AS units
-          FROM stock_commitments
-          WHERE supply_pool_id = ?
-            AND state IN ('ACCEPTED', 'RESERVED')
+          SELECT
+            COALESCE(
+              (
+                SELECT SUM(units)
+                FROM stock_commitments
+                WHERE supply_pool_id = ?
+                  AND state IN ('ACCEPTED', 'RESERVED')
+              ),
+              0
+            ) +
+            COALESCE(
+              (
+                SELECT SUM(quantity)
+                FROM marketplace_order_obligations
+                WHERE supply_pool_id = ?
+                  AND state = 'HELD_MULTI_ITEM'
+              ),
+              0
+            ) AS units
         `,
       )
-      .get(listing.supply_pool_id) as { units: bigint };
+      .get(
+        listing.supply_pool_id,
+        listing.supply_pool_id,
+      ) as { units: bigint };
 
     const ceiling =
       pool.allocated_units < pool.available_units
@@ -387,9 +532,10 @@ export function ingestMarketplaceOrder(
       observed < quantity ||
       pool.consumed_units + committed.units > ceiling
     ) {
-      openOversellException(
+      openOrderException(
         database,
         orderId,
+        "ACCEPTED_ORDER_CAPACITY_MISMATCH",
         "Authoritative order exceeds locally conserved stock. Preserve the order, keep exposure paused, and resolve supply before procurement.",
         event.receivedAt,
       );
