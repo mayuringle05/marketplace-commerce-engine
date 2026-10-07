@@ -1,6 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { canonicalJson, deterministicId } from "../core/deterministic.ts";
+import {
+  canonicalJson,
+  deterministicId,
+  sha256Hex,
+} from "../core/deterministic.ts";
 
 export interface MarketplaceReadEvent {
   readonly externalEventId: string;
@@ -17,7 +21,9 @@ export interface MarketplaceReadPage {
 
 export interface MarketplaceReadSource {
   readonly approvedAccess: boolean;
-  fetchPage(cursor: string | null): MarketplaceReadPage;
+  fetchPage(
+    cursor: string | null,
+  ): MarketplaceReadPage | Promise<MarketplaceReadPage>;
 }
 
 export class MarketplaceRateLimitError extends Error {
@@ -43,17 +49,31 @@ export interface MarketplaceSyncResult {
   readonly finalCursor: string | null;
 }
 
-export function syncMarketplaceReadStream(
+interface BufferedEvent {
+  readonly event: MarketplaceReadEvent;
+  readonly payloadJson: string;
+  readonly payloadHash: string;
+}
+
+export async function syncMarketplaceReadStream(
   database: DatabaseSync,
   marketplace: string,
   stream: string,
   source: MarketplaceReadSource,
   syncedAt: string,
-): MarketplaceSyncResult {
+  maximumPages = 100,
+): Promise<MarketplaceSyncResult> {
   if (!source.approvedAccess) {
     throw new Error(
       "Marketplace read source is not approved for automated access.",
     );
+  }
+  if (
+    !Number.isSafeInteger(maximumPages) ||
+    maximumPages < 1 ||
+    maximumPages > 1_000
+  ) {
+    throw new Error("maximumPages must be 1..1000.");
   }
 
   const cursorRow = database
@@ -72,55 +92,126 @@ export function syncMarketplaceReadStream(
   const initialCursor = cursorRow?.cursor ?? null;
   let cursor = initialCursor;
   let committedCheckpoint = initialCursor;
+  const seenPageCursors = new Set<string>();
+  const buffered: BufferedEvent[] = [];
+
+  for (let pageIndex = 0; pageIndex < maximumPages; pageIndex += 1) {
+    const cursorKey = cursor ?? "<NULL>";
+    if (seenPageCursors.has(cursorKey)) {
+      throw new Error("Marketplace pagination cursor cycle detected.");
+    }
+    seenPageCursors.add(cursorKey);
+
+    const page = await source.fetchPage(cursor);
+    if (page.checkpointCursor.trim().length === 0) {
+      throw new Error("Marketplace checkpoint cursor is required.");
+    }
+
+    for (const event of page.events) {
+      const payloadJson = canonicalJson(event.payload);
+      buffered.push({
+        event,
+        payloadJson,
+        payloadHash: sha256Hex(payloadJson),
+      });
+    }
+
+    committedCheckpoint = page.checkpointCursor;
+    cursor = page.nextCursor;
+
+    if (cursor === null) {
+      break;
+    }
+
+    if (pageIndex === maximumPages - 1) {
+      throw new Error("Marketplace pagination exceeded page limit.");
+    }
+  }
+
   let inserted = 0;
   let duplicates = 0;
 
   database.exec("BEGIN IMMEDIATE");
   try {
-    while (true) {
-      const page = source.fetchPage(cursor);
+    const current = database
+      .prepare(
+        `
+          SELECT cursor
+          FROM marketplace_cursors
+          WHERE marketplace = ?
+            AND stream = ?
+        `,
+      )
+      .get(marketplace, stream) as
+      | { cursor: string | null }
+      | undefined;
 
-      for (const event of page.events) {
-        const id = deterministicId(
-          "mpevent",
+    if ((current?.cursor ?? null) !== initialCursor) {
+      throw new Error(
+        "Marketplace cursor changed during fetch; retry from the new checkpoint.",
+      );
+    }
+
+    for (const item of buffered) {
+      const id = deterministicId(
+        "mpevent",
+        marketplace,
+        stream,
+        item.event.externalEventId,
+      );
+
+      const existing = database
+        .prepare(
+          `
+            SELECT payload_hash
+            FROM marketplace_events_v2
+            WHERE marketplace = ?
+              AND stream = ?
+              AND external_event_id = ?
+          `,
+        )
+        .get(
           marketplace,
-          event.externalEventId,
-        );
-        const result = database
-          .prepare(
-            `
-              INSERT OR IGNORE INTO marketplace_events (
-                id,
-                marketplace,
-                event_type,
-                external_event_id,
-                payload_json,
-                observed_at
-              ) VALUES (?, ?, ?, ?, ?, ?)
-            `,
-          )
-          .run(
-            id,
-            marketplace,
-            event.eventType,
-            event.externalEventId,
-            canonicalJson(event.payload),
-            event.observedAt,
+          stream,
+          item.event.externalEventId,
+        ) as { payload_hash: string } | undefined;
+
+      if (existing !== undefined) {
+        if (existing.payload_hash !== item.payloadHash) {
+          throw new Error(
+            "Conflicting replay for marketplace event.",
           );
-
-        if (result.changes === 1n) {
-          inserted += 1;
-        } else {
-          duplicates += 1;
         }
+        duplicates += 1;
+        continue;
       }
 
-      committedCheckpoint = page.checkpointCursor;
-      cursor = page.nextCursor;
-
-      if (page.nextCursor === null) {
-        break;
-      }
+      database
+        .prepare(
+          `
+            INSERT INTO marketplace_events_v2 (
+              id,
+              marketplace,
+              stream,
+              event_type,
+              external_event_id,
+              payload_json,
+              payload_hash,
+              observed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+        )
+        .run(
+          id,
+          marketplace,
+          stream,
+          item.event.eventType,
+          item.event.externalEventId,
+          item.payloadJson,
+          item.payloadHash,
+          item.event.observedAt,
+        );
+      inserted += 1;
     }
 
     database
@@ -174,9 +265,13 @@ export async function syncMarketplaceReadStreamWithRetry(
     throw new Error("maximumAttempts must be 1..10.");
   }
 
-  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+  for (
+    let attempt = 1;
+    attempt <= maximumAttempts;
+    attempt += 1
+  ) {
     try {
-      return syncMarketplaceReadStream(
+      return await syncMarketplaceReadStream(
         database,
         marketplace,
         stream,
