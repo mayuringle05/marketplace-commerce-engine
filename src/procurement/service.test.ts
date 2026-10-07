@@ -10,6 +10,9 @@ import {
 import {
   SimulatedSupplierPurchaseAdapter,
 } from "../supplier/simulated-purchase.ts";
+import { parseSupplierFeedJson } from "../supplier/feed.ts";
+import { importSupplierFeed } from "../supplier/importer.ts";
+import { readSupplyPoolCapacity } from "../supplier/pools.ts";
 import {
   authorizeSingleOrder,
   ingestSingleOrder,
@@ -478,6 +481,79 @@ test("explicit unknown provider result remains quarantined until authoritative h
       ),
       true,
     );
+  } finally {
+    provider.close();
+    database.close();
+  }
+});
+
+test("confirmed purchase consumption survives quote refresh until explicit replenishment", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+  const provider = new SimulatedSupplierPurchaseAdapter();
+
+  try {
+    const fixture = seedSingleSkuFixture(database, {
+      allocatedUnits: 5,
+      availableUnits: 5,
+    });
+    const orderId = ingestSingleOrder(database, "CONSUME");
+    authorizeSingleOrder(
+      database,
+      orderId,
+      fixture.sourceOfferId,
+    );
+    const poId = createIntent(database, orderId);
+
+    submitPurchaseOnce(
+      database,
+      poId,
+      provider,
+      "2026-10-07T00:13:30.000Z",
+    );
+
+    importSupplierFeed(
+      database,
+      parseSupplierFeedJson(
+        JSON.stringify({
+          supplierId: "supplier-1",
+          sourceVersion: "quote-v2",
+          sourceRef: "quote-v2",
+          observedAt: "2026-10-07T00:14:00.000Z",
+          offers: [
+            {
+              productId: "product-1",
+              fulfilmentRouteId: "route-1",
+              supplierSku: "SKU-1",
+              grossCostPaise: 35_000,
+              taxRateBps: 1_800,
+              allocatedUnits: 5,
+              availableUnits: 5,
+              validFrom: "2026-10-07T00:00:00.000Z",
+              validUntil: "2026-10-08T00:00:00.000Z",
+              package: {
+                packedWeightGrams: 650,
+                lengthMm: 220,
+                widthMm: 160,
+                heightMm: 90,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const capacity = readSupplyPoolCapacity(
+      database,
+      fixture.supplyPoolId,
+      1n,
+    );
+
+    assert.equal(capacity.allocatedUnits, 5n);
+    assert.equal(capacity.consumedUnits, 1n);
+    assert.equal(capacity.committedUnits, 0n);
+    assert.equal(capacity.publicCapacityUnits, 3n);
   } finally {
     provider.close();
     database.close();
