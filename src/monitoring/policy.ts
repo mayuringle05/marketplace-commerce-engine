@@ -47,7 +47,7 @@ export function boundedBackoffSeconds(
         "retryAfterSeconds must be a non-negative integer.",
       );
     }
-    return Math.min(retryAfterSeconds, 60 * 60);
+    return retryAfterSeconds;
   }
 
   const exponential = Math.min(2 ** (attempt - 1) * 5, 60 * 60);
