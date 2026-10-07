@@ -481,12 +481,20 @@ test("two accepted orders cannot reserve more cash than the shared verified bala
 
   try {
     const fixture = seedSingleSkuFixture(database, {
-      cashPaise: 80_000,
+      cashPaise: 250_000,
       listingQuantity: 2,
     });
 
     const order1 = ingestSingleOrder(database, "CASH-1");
     const order2 = ingestSingleOrder(database, "CASH-2");
+
+    recordVerifiedCashSnapshot(
+      database,
+      80_000,
+      "cash-competition-balance",
+      "2026-10-07T00:12:15.000Z",
+      "2026-10-07T00:30:00.000Z",
+    );
 
     authorizeSingleOrder(
       database,
