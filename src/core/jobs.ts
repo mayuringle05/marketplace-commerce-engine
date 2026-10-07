@@ -33,6 +33,7 @@ export function enqueueJob(
     input.jobType,
     input.subjectKey,
     payloadJson,
+    input.runAfter,
   );
 
   database
@@ -187,11 +188,122 @@ export function completeJob(
           AND status = 'LEASED'
           AND lease_owner = ?
           AND fencing_token = ?
+          AND lease_until > ?
       `,
     )
-    .run(completedAt, jobId, owner, fencingToken);
+    .run(
+      completedAt,
+      jobId,
+      owner,
+      fencingToken,
+      completedAt,
+    );
 
   if (result.changes !== 1n) {
     throw new Error("Stale or invalid job fencing token.");
+  }
+}
+
+export function assertCurrentJobLease(
+  database: DatabaseSync,
+  jobId: string,
+  owner: string,
+  fencingToken: bigint,
+  asOf: string,
+): void {
+  const row = database
+    .prepare(
+      `
+        SELECT 1 AS ok
+        FROM jobs
+        WHERE id = ?
+          AND status = 'LEASED'
+          AND lease_owner = ?
+          AND fencing_token = ?
+          AND lease_until > ?
+      `,
+    )
+    .get(jobId, owner, fencingToken, asOf);
+
+  if (row === undefined) {
+    throw new Error("Stale or expired job lease.");
+  }
+}
+
+export function rescheduleLeasedJob(
+  database: DatabaseSync,
+  jobId: string,
+  owner: string,
+  fencingToken: bigint,
+  runAfter: string,
+  errorMessage: string,
+  updatedAt: string,
+): void {
+  assertCanonicalUtcTimestamp(runAfter, "runAfter");
+  const result = database
+    .prepare(
+      `
+        UPDATE jobs
+        SET
+          status = 'PENDING',
+          run_after = ?,
+          lease_owner = NULL,
+          lease_until = NULL,
+          last_error = ?,
+          updated_at = ?
+        WHERE id = ?
+          AND status = 'LEASED'
+          AND lease_owner = ?
+          AND fencing_token = ?
+      `,
+    )
+    .run(
+      runAfter,
+      errorMessage,
+      updatedAt,
+      jobId,
+      owner,
+      fencingToken,
+    );
+
+  if (result.changes !== 1n) {
+    throw new Error("Cannot reschedule stale job lease.");
+  }
+}
+
+export function quarantineLeasedJob(
+  database: DatabaseSync,
+  jobId: string,
+  owner: string,
+  fencingToken: bigint,
+  errorMessage: string,
+  updatedAt: string,
+): void {
+  const result = database
+    .prepare(
+      `
+        UPDATE jobs
+        SET
+          status = 'QUARANTINED',
+          lease_owner = NULL,
+          lease_until = NULL,
+          last_error = ?,
+          updated_at = ?
+        WHERE id = ?
+          AND status = 'LEASED'
+          AND lease_owner = ?
+          AND fencing_token = ?
+      `,
+    )
+    .run(
+      errorMessage,
+      updatedAt,
+      jobId,
+      owner,
+      fencingToken,
+    );
+
+  if (result.changes !== 1n) {
+    throw new Error("Cannot quarantine stale job lease.");
   }
 }
