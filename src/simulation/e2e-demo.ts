@@ -4,6 +4,10 @@ import { evaluateCandidate } from "../economics/engine.ts";
 import { asPaise } from "../economics/money.ts";
 import type { EconomicScenario } from "../economics/types.ts";
 import {
+  recordVerifiedCashSnapshot,
+  setCashReservePolicy,
+} from "../cash/state.ts";
+import {
   markInTransit,
   markShipmentOutcome,
   confirmCarrierHandover,
@@ -23,6 +27,9 @@ import {
 } from "../supplier/freshness.ts";
 import { parseSupplierFeedJson } from "../supplier/feed.ts";
 import { importSupplierFeed } from "../supplier/importer.ts";
+import {
+  SimulatedSupplierPurchaseAdapter,
+} from "../supplier/simulated-purchase.ts";
 import {
   initializeRuntimeSafety,
   setStopNewExposure,
@@ -323,6 +330,8 @@ export function runLocalEndToEndDemo(
     tradeUnitId: "trade-unit-1",
     sourceOfferId: sourceOffer.id,
     marketplace: "SIM",
+    approvedPricePaise: 79_900,
+    sourceFreshUntil: "2026-10-07T00:20:00.000Z",
     identityClass: "A",
     freshness,
     routeVerified: true,
@@ -347,6 +356,20 @@ export function runLocalEndToEndDemo(
     throw new Error("Demo opportunity did not reach LIST.");
   }
 
+  recordVerifiedCashSnapshot(
+    database,
+    200_000,
+    "demo-bank-balance",
+    "2026-10-07T00:10:00.000Z",
+    "2026-10-07T01:00:00.000Z",
+  );
+  setCashReservePolicy(
+    database,
+    20_000,
+    20_000,
+    "2026-10-07T00:10:00.000Z",
+  );
+
   setStopNewExposure(
     database,
     false,
@@ -362,13 +385,13 @@ export function runLocalEndToEndDemo(
     sourceOfferId: sourceOffer.id,
     pricePaise: 79_900,
     requestedQuantity: 1,
-    cashExposureLimitUnits: 1,
     updatedAt: "2026-10-07T00:11:00.000Z",
   });
 
   const orderId = ingestMarketplaceOrder(database, {
     marketplace: "SIM",
     marketplaceOrderId: "SIM-ORDER-001",
+    marketplaceItemId: "SIM-ORDER-001-ITEM-1",
     sellerSku: "COSMO-ACME-001",
     quantity: 1,
     acceptedPricePaise: 79_900,
@@ -379,37 +402,36 @@ export function runLocalEndToEndDemo(
   validateAndAuthorizeOrder(database, {
     orderId,
     sourceOfferId: sourceOffer.id,
-    units: 1,
-    cashPaise: 50_930,
-    availableCashPaise: 200_000,
-    identityOk: true,
-    sourceFresh: true,
-    economicsOk: true,
-    routeOk: true,
     authorizedAt: "2026-10-07T00:12:30.000Z",
   });
 
   const poId = recordPurchaseIntent(database, {
     orderId,
-    supplierId: "supplier-1",
-    amountPaise: 35_000,
-    quantity: 1,
     destinationKey: "SIM-CUSTOMER-DESTINATION",
     authorizationExpiresAt: "2026-10-07T00:18:00.000Z",
     createdAt: "2026-10-07T00:13:00.000Z",
   });
 
-  submitPurchaseOnce(
-    database,
-    poId,
+  const supplier = new SimulatedSupplierPurchaseAdapter(
+    ":memory:",
     "CONFIRM",
-    "2026-10-07T00:13:30.000Z",
   );
+  try {
+    submitPurchaseOnce(
+      database,
+      poId,
+      supplier,
+      "2026-10-07T00:13:30.000Z",
+    );
+  } finally {
+    supplier.close();
+  }
 
   confirmPack(
     database,
     orderId,
-    true,
+    "4006381333931",
+    "SIM-BARCODE-SCAN-001",
     "SIM-LABEL-001",
     "SIM-CARRIER",
     "SIM-TRACK-001",
@@ -434,6 +456,7 @@ export function runLocalEndToEndDemo(
     orderId,
     "DELIVERED",
     "2026-10-08T10:00:00.000Z",
+    "2026-10-20T00:00:00.000Z",
   );
 
   const profit = reconcileDeliveredKeptOrder(database, {
@@ -444,9 +467,11 @@ export function runLocalEndToEndDemo(
     supplierPayablePaise: 30_509,
     packingPaise: 2_000,
     overheadPaise: 1_200,
+    expectedSettlementCashPaise: 64_750,
     settlementCashPaise: 64_750,
-    sourceRef: "SIM-STATEMENT-001",
-    maturityEligibleAt: "2026-10-20T00:00:00.000Z",
+    marketplaceStatementRef: "SIM-STATEMENT-001",
+    supplierInvoiceRef: "SIM-SUPPLIER-INVOICE-001",
+    bankEvidenceRef: "SIM-BANK-SETTLEMENT-001",
     settledAt: "2026-10-20T00:00:00.000Z",
   });
 
