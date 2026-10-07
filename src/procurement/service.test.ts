@@ -3,320 +3,229 @@ import test from "node:test";
 
 import { openDatabase } from "../db/database.ts";
 import {
-  reconcileUnknownPurchase,
   recordPurchaseIntent,
+  reconcilePurchase,
   submitPurchaseOnce,
 } from "./service.ts";
 import {
-  recordRecoveredSimulatedPurchase,
+  SimulatedSupplierPurchaseAdapter,
 } from "../supplier/simulated-purchase.ts";
+import {
+  authorizeSingleOrder,
+  ingestSingleOrder,
+  seedSingleSkuFixture,
+} from "../test/commerce-fixture.ts";
 
-const T = "2026-10-07T00:00:00.000Z";
+const T0 = "2026-10-07T00:00:00.000Z";
 
-function seedAuthorizedOrder(
+function authorizedOrder(
   database: ReturnType<typeof openDatabase>,
-): void {
-  database
-    .prepare(
-      `
-        INSERT INTO suppliers (
-          id,
-          legal_name,
-          status,
-          created_at,
-          updated_at
-        ) VALUES ('supplier-1', 'Supplier One', 'verified', ?, ?)
-      `,
-    )
-    .run(T, T);
-
-  database
-    .prepare(
-      `
-        INSERT INTO orders (
-          id,
-          marketplace,
-          marketplace_order_id,
-          state,
-          version,
-          received_at,
-          updated_at,
-          immutable_economics_json
-        ) VALUES (
-          'order-1',
-          'SIM',
-          'REMOTE-1',
-          'AUTHORIZED',
-          1,
-          ?,
-          ?,
-          '{}'
-        )
-      `,
-    )
-    .run(T, T);
-
-  database
-    .prepare(
-      `
-        INSERT INTO simulated_marketplace_orders (
-          marketplace,
-          marketplace_order_id,
-          status,
-          updated_at
-        ) VALUES ('SIM', 'REMOTE-1', 'ACCEPTED', ?)
-      `,
-    )
-    .run(T);
+): {
+  readonly orderId: string;
+  readonly sourceOfferId: string;
+} {
+  const fixture = seedSingleSkuFixture(database);
+  const orderId = ingestSingleOrder(database);
+  authorizeSingleOrder(
+    database,
+    orderId,
+    fixture.sourceOfferId,
+  );
+  return {
+    orderId,
+    sourceOfferId: fixture.sourceOfferId,
+  };
 }
 
-test("unknown purchase is quarantined and cannot be blindly resubmitted", () => {
+function createIntent(
+  database: ReturnType<typeof openDatabase>,
+  orderId: string,
+  expiresAt = "2026-10-07T00:18:00.000Z",
+): string {
+  return recordPurchaseIntent(database, {
+    orderId,
+    destinationKey: "DEST-1",
+    authorizationExpiresAt: expiresAt,
+    createdAt: "2026-10-07T00:13:00.000Z",
+  });
+}
+
+test("purchase intent is bound to exact order reservation supplier SKU route mapping and destination", () => {
   const database = openDatabase(":memory:", {
-    appliedAt: T,
+    appliedAt: T0,
   });
 
   try {
-    seedAuthorizedOrder(database);
+    const { orderId } = authorizedOrder(database);
+    const poId = createIntent(database, orderId);
 
-    const poId = recordPurchaseIntent(database, {
-      orderId: "order-1",
-      supplierId: "supplier-1",
-      amountPaise: 35_000,
-      quantity: 1,
-      destinationKey: "DEST-1",
-      authorizationExpiresAt: "2026-10-07T00:06:00.000Z",
-      createdAt: "2026-10-07T00:01:00.000Z",
-    });
+    const row = database
+      .prepare(
+        `
+          SELECT
+            a.quantity,
+            a.maximum_amount_paise,
+            a.destination_key,
+            a.supplier_id,
+            a.supplier_sku,
+            a.fulfilment_route_id,
+            a.trade_unit_id,
+            a.mapping_version,
+            a.reservation_id,
+            po.authorized_amount_paise,
+            po.quantity
+          FROM purchase_orders po
+          JOIN purchase_authorizations a
+            ON a.id = po.authorization_id
+          WHERE po.id = ?
+        `,
+      )
+      .get(poId) as {
+      quantity: bigint;
+      maximum_amount_paise: bigint;
+      destination_key: string;
+      supplier_id: string;
+      supplier_sku: string;
+      fulfilment_route_id: string;
+      trade_unit_id: string;
+      mapping_version: bigint;
+      reservation_id: string;
+      authorized_amount_paise: bigint;
+    };
+
+    assert.equal(row.quantity, 1n);
+    assert.equal(row.maximum_amount_paise, 35_000n);
+    assert.equal(row.authorized_amount_paise, 35_000n);
+    assert.equal(row.destination_key, "DEST-1");
+    assert.equal(row.supplier_id, "supplier-1");
+    assert.equal(row.supplier_sku, "SKU-1");
+    assert.equal(row.fulfilment_route_id, "route-1");
+    assert.equal(row.trade_unit_id, "trade-1");
+    assert.equal(row.mapping_version, 1n);
+    assert.ok(row.reservation_id.length > 0);
+  } finally {
+    database.close();
+  }
+});
+
+test("authorization expiry is exclusive and releases proven-unspent reservation", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+  const provider = new SimulatedSupplierPurchaseAdapter();
+
+  try {
+    const { orderId } = authorizedOrder(database);
+    const poId = createIntent(
+      database,
+      orderId,
+      "2026-10-07T00:13:30.000Z",
+    );
 
     submitPurchaseOnce(
       database,
       poId,
-      "UNKNOWN",
-      "2026-10-07T00:02:00.000Z",
+      provider,
+      "2026-10-07T00:13:30.000Z",
     );
 
     const order = database
-      .prepare("SELECT state FROM orders WHERE id = 'order-1'")
-      .get() as { state: string };
+      .prepare("SELECT state FROM orders WHERE id = ?")
+      .get(orderId) as { state: string };
     const po = database
-      .prepare(
-        `
-          SELECT
-            state,
-            idempotency_key,
-            client_po_ref,
-            authorized_amount_paise,
-            quantity
-          FROM purchase_orders
-          WHERE id = ?
-        `,
-      )
-      .get(poId) as {
-      state: string;
-      idempotency_key: string;
-      client_po_ref: string;
-      authorized_amount_paise: bigint;
-      quantity: bigint;
-    };
-    const exception = database
-      .prepare(
-        `
-          SELECT state, exposure_reserved, safe_next_action
-          FROM exceptions
-          WHERE order_id = 'order-1'
-        `,
-      )
-      .get() as {
-      state: string;
-      exposure_reserved: bigint;
-      safe_next_action: string;
-    };
-
-    assert.equal(order.state, "PAYMENT_UNKNOWN");
-    assert.equal(po.state, "PURCHASE_UNKNOWN");
-    assert.equal(exception.state, "OPEN");
-    assert.equal(exception.exposure_reserved, 1n);
-    assert.match(exception.safe_next_action, /do not resubmit/i);
-
-    assert.throws(
-      () =>
-        submitPurchaseOnce(
-          database,
-          poId,
-          "CONFIRM",
-          "2026-10-07T00:03:00.000Z",
-        ),
-      /not ready for first submission/,
-    );
-
-    recordRecoveredSimulatedPurchase(
-      database,
-      {
-        idempotencyKey: po.idempotency_key,
-        clientPoRef: po.client_po_ref,
-        amountPaise: Number(po.authorized_amount_paise),
-        quantity: Number(po.quantity),
-        submittedAt: "2026-10-07T00:02:00.000Z",
-      },
-      "CONFIRMED",
-    );
-
-    assert.equal(
-      reconcileUnknownPurchase(
-        database,
-        poId,
-        "2026-10-07T00:04:00.000Z",
-      ),
-      true,
-    );
-
-    const recoveredOrder = database
-      .prepare("SELECT state FROM orders WHERE id = 'order-1'")
-      .get() as { state: string };
-    const recoveredPo = database
       .prepare("SELECT state FROM purchase_orders WHERE id = ?")
       .get(poId) as { state: string };
-    const resolvedException = database
+    const reservation = database
       .prepare(
-        `
-          SELECT state
-          FROM exceptions
-          WHERE order_id = 'order-1'
-        `,
+        "SELECT status FROM reservations WHERE order_id = ?",
       )
-      .get() as { state: string };
-    const remoteCount = database
+      .get(orderId) as { status: string };
+    const providerCount = provider.database
       .prepare(
-        "SELECT COUNT(*) AS count FROM simulated_supplier_orders",
+        "SELECT COUNT(*) AS count FROM supplier_purchase_history",
       )
       .get() as { count: bigint };
 
-    assert.equal(recoveredOrder.state, "PO_CONFIRMED");
-    assert.equal(recoveredPo.state, "CONFIRMED");
-    assert.equal(resolvedException.state, "RESOLVED");
-    assert.equal(remoteCount.count, 1n);
+    assert.equal(order.state, "SLA_BREACH");
+    assert.equal(po.state, "REJECTED");
+    assert.equal(reservation.status, "RELEASED");
+    assert.equal(providerCount.count, 0n);
   } finally {
+    provider.close();
     database.close();
   }
 });
 
-test("expired purchase authorization cannot submit a supplier order", () => {
+test("marketplace cancellation before provider call causes zero supplier submissions", () => {
   const database = openDatabase(":memory:", {
-    appliedAt: T,
+    appliedAt: T0,
   });
+  const provider = new SimulatedSupplierPurchaseAdapter();
 
   try {
-    database
-      .prepare(
-        `
-          INSERT INTO suppliers (
-            id,
-            legal_name,
-            status,
-            created_at,
-            updated_at
-          ) VALUES ('supplier-expiry', 'Supplier Expiry', 'verified', ?, ?)
-        `,
-      )
-      .run(T, T);
-
-    database
-      .prepare(
-        `
-          INSERT INTO orders (
-            id,
-            marketplace,
-            marketplace_order_id,
-            state,
-            version,
-            received_at,
-            updated_at,
-            immutable_economics_json
-          ) VALUES (
-            'order-expiry',
-            'SIM',
-            'REMOTE-EXPIRY',
-            'AUTHORIZED',
-            1,
-            ?,
-            ?,
-            '{}'
-          )
-        `,
-      )
-      .run(T, T);
-
-    database
-      .prepare(
-        `
-          INSERT INTO simulated_marketplace_orders (
-            marketplace,
-            marketplace_order_id,
-            status,
-            updated_at
-          ) VALUES ('SIM', 'REMOTE-EXPIRY', 'ACCEPTED', ?)
-        `,
-      )
-      .run(T);
-
-    const poId = recordPurchaseIntent(database, {
-      orderId: "order-expiry",
-      supplierId: "supplier-expiry",
-      amountPaise: 35_000,
-      quantity: 1,
-      destinationKey: "DEST",
-      authorizationExpiresAt: "2026-10-07T00:02:00.000Z",
-      createdAt: "2026-10-07T00:01:00.000Z",
-    });
-
-    assert.throws(
-      () =>
-        submitPurchaseOnce(
-          database,
-          poId,
-          "CONFIRM",
-          "2026-10-07T00:02:01.000Z",
-        ),
-      /authorization has expired/,
-    );
-
-    const remote = database
-      .prepare(
-        "SELECT COUNT(*) AS count FROM simulated_supplier_orders",
-      )
-      .get() as { count: bigint };
-    assert.equal(remote.count, 0n);
-  } finally {
-    database.close();
-  }
-});
-
-test("customer cancellation before supplier submission blocks purchase", () => {
-  const database = openDatabase(":memory:", {
-    appliedAt: T,
-  });
-
-  try {
-    seedAuthorizedOrder(database);
-
-    const poId = recordPurchaseIntent(database, {
-      orderId: "order-1",
-      supplierId: "supplier-1",
-      amountPaise: 35_000,
-      quantity: 1,
-      destinationKey: "DEST-1",
-      authorizationExpiresAt: "2026-10-07T00:06:00.000Z",
-      createdAt: "2026-10-07T00:01:00.000Z",
-    });
+    const { orderId } = authorizedOrder(database);
+    const poId = createIntent(database, orderId);
 
     database
       .prepare(
         `
           UPDATE simulated_marketplace_orders
           SET status = 'CANCELLED',
-              updated_at = '2026-10-07T00:01:30.000Z'
-          WHERE marketplace = 'SIM'
-            AND marketplace_order_id = 'REMOTE-1'
+              updated_at = '2026-10-07T00:13:15.000Z'
+          WHERE marketplace_order_id = 'ORDER-1'
+        `,
+      )
+      .run();
+
+    submitPurchaseOnce(
+      database,
+      poId,
+      provider,
+      "2026-10-07T00:13:30.000Z",
+    );
+
+    const order = database
+      .prepare("SELECT state FROM orders WHERE id = ?")
+      .get(orderId) as { state: string };
+    const reservation = database
+      .prepare(
+        "SELECT status FROM reservations WHERE order_id = ?",
+      )
+      .get(orderId) as { status: string };
+    const providerCount = provider.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM supplier_purchase_history",
+      )
+      .get() as { count: bigint };
+
+    assert.equal(order.state, "CUSTOMER_CANCELLED");
+    assert.equal(reservation.status, "RELEASED");
+    assert.equal(providerCount.count, 0n);
+  } finally {
+    provider.close();
+    database.close();
+  }
+});
+
+test("mapping invalidation after authorization blocks supplier call and retains reservation", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+  const provider = new SimulatedSupplierPurchaseAdapter();
+
+  try {
+    const { orderId } = authorizedOrder(database);
+    const poId = createIntent(database, orderId);
+
+    database
+      .prepare(
+        `
+          UPDATE packaged_trade_units
+          SET
+            mapping_status = 'INVALIDATED',
+            invalidation_reason = 'LATE_IDENTITY_CONFLICT',
+            updated_at = '2026-10-07T00:13:10.000Z'
+          WHERE id = 'trade-1'
         `,
       )
       .run();
@@ -326,24 +235,251 @@ test("customer cancellation before supplier submission blocks purchase", () => {
         submitPurchaseOnce(
           database,
           poId,
-          "CONFIRM",
-          "2026-10-07T00:02:00.000Z",
+          provider,
+          "2026-10-07T00:13:30.000Z",
         ),
-      /not ACCEPTED/,
+      /stale, cancelled, invalidated, or unresolved/,
     );
 
-    const remote = database
-      .prepare(
-        "SELECT COUNT(*) AS count FROM simulated_supplier_orders",
-      )
-      .get() as { count: bigint };
     const po = database
       .prepare("SELECT state FROM purchase_orders WHERE id = ?")
       .get(poId) as { state: string };
+    const reservation = database
+      .prepare(
+        "SELECT status FROM reservations WHERE order_id = ?",
+      )
+      .get(orderId) as { status: string };
+    const providerCount = provider.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM supplier_purchase_history",
+      )
+      .get() as { count: bigint };
 
-    assert.equal(remote.count, 0n);
     assert.equal(po.state, "INTENT_RECORDED");
+    assert.equal(reservation.status, "ACTIVE");
+    assert.equal(providerCount.count, 0n);
   } finally {
+    provider.close();
+    database.close();
+  }
+});
+
+test("provider success followed by local failure becomes unknown and reconciles without second submission", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+  const provider = new SimulatedSupplierPurchaseAdapter(
+    ":memory:",
+    "CONFIRM",
+  );
+
+  try {
+    const { orderId } = authorizedOrder(database);
+    const poId = createIntent(database, orderId);
+
+    provider.beforeReturn = () => {
+      throw new Error("simulated process failure after provider commit");
+    };
+
+    assert.throws(
+      () =>
+        submitPurchaseOnce(
+          database,
+          poId,
+          provider,
+          "2026-10-07T00:13:30.000Z",
+        ),
+      /simulated process failure/,
+    );
+
+    const afterFailure = database
+      .prepare(
+        `
+          SELECT po.state AS po_state, o.state AS order_state
+          FROM purchase_orders po
+          JOIN orders o ON o.id = po.order_id
+          WHERE po.id = ?
+        `,
+      )
+      .get(poId) as {
+      po_state: string;
+      order_state: string;
+    };
+    const providerCount = provider.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM supplier_purchase_history",
+      )
+      .get() as { count: bigint };
+
+    assert.equal(afterFailure.po_state, "PURCHASE_UNKNOWN");
+    assert.equal(afterFailure.order_state, "PAYMENT_UNKNOWN");
+    assert.equal(providerCount.count, 1n);
+
+    provider.beforeReturn = null;
+
+    assert.throws(
+      () =>
+        submitPurchaseOnce(
+          database,
+          poId,
+          provider,
+          "2026-10-07T00:14:00.000Z",
+        ),
+      /reconcile instead/,
+    );
+
+    assert.equal(
+      reconcilePurchase(
+        database,
+        poId,
+        provider,
+        "2026-10-07T00:14:00.000Z",
+      ),
+      true,
+    );
+
+    const final = database
+      .prepare(
+        `
+          SELECT po.state AS po_state, o.state AS order_state
+          FROM purchase_orders po
+          JOIN orders o ON o.id = po.order_id
+          WHERE po.id = ?
+        `,
+      )
+      .get(poId) as {
+      po_state: string;
+      order_state: string;
+    };
+    const finalProviderCount = provider.database
+      .prepare(
+        "SELECT COUNT(*) AS count FROM supplier_purchase_history",
+      )
+      .get() as { count: bigint };
+    const stock = database
+      .prepare(
+        `
+          SELECT consumed_units
+          FROM supply_pools
+          WHERE supplier_id = 'supplier-1'
+            AND supplier_sku = 'SKU-1'
+        `,
+      )
+      .get() as { consumed_units: bigint };
+
+    assert.equal(final.po_state, "CONFIRMED");
+    assert.equal(final.order_state, "PO_CONFIRMED");
+    assert.equal(finalProviderCount.count, 1n);
+    assert.equal(stock.consumed_units, 1n);
+  } finally {
+    provider.close();
+    database.close();
+  }
+});
+
+test("explicit unknown provider result remains quarantined until authoritative history resolves it", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+  const provider = new SimulatedSupplierPurchaseAdapter(
+    ":memory:",
+    "UNKNOWN",
+  );
+
+  try {
+    const { orderId } = authorizedOrder(database);
+    const poId = createIntent(database, orderId);
+
+    submitPurchaseOnce(
+      database,
+      poId,
+      provider,
+      "2026-10-07T00:13:30.000Z",
+    );
+
+    assert.equal(
+      reconcilePurchase(
+        database,
+        poId,
+        provider,
+        "2026-10-07T00:14:00.000Z",
+      ),
+      false,
+    );
+
+    const po = database
+      .prepare("SELECT state FROM purchase_orders WHERE id = ?")
+      .get(poId) as { state: string };
+    const exception = database
+      .prepare(
+        `
+          SELECT state, exposure_reserved
+          FROM exceptions
+          WHERE order_id = ?
+            AND exception_type = 'PURCHASE_UNKNOWN'
+        `,
+      )
+      .get(orderId) as {
+      state: string;
+      exposure_reserved: bigint;
+    };
+
+    assert.equal(po.state, "PURCHASE_UNKNOWN");
+    assert.equal(exception.state, "OPEN");
+    assert.equal(exception.exposure_reserved, 1n);
+
+    const auth = database
+      .prepare(
+        `
+          SELECT
+            a.supplier_id,
+            a.supplier_sku,
+            a.destination_key,
+            a.quantity,
+            a.maximum_amount_paise,
+            po.idempotency_key,
+            po.client_po_ref
+          FROM purchase_orders po
+          JOIN purchase_authorizations a
+            ON a.id = po.authorization_id
+          WHERE po.id = ?
+        `,
+      )
+      .get(poId) as {
+      supplier_id: string;
+      supplier_sku: string;
+      destination_key: string;
+      quantity: bigint;
+      maximum_amount_paise: bigint;
+      idempotency_key: string;
+      client_po_ref: string;
+    };
+
+    provider.recordRecoveredResult(
+      {
+        idempotencyKey: auth.idempotency_key,
+        clientPoRef: auth.client_po_ref,
+        supplierId: auth.supplier_id,
+        supplierSku: auth.supplier_sku,
+        amountPaise: Number(auth.maximum_amount_paise),
+        quantity: Number(auth.quantity),
+        destinationKey: auth.destination_key,
+        submittedAt: "2026-10-07T00:13:30.000Z",
+      },
+      "CONFIRMED",
+    );
+
+    assert.equal(
+      reconcilePurchase(
+        database,
+        poId,
+        provider,
+        "2026-10-07T00:15:00.000Z",
+      ),
+      true,
+    );
+  } finally {
+    provider.close();
     database.close();
   }
 });
