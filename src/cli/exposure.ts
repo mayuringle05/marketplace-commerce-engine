@@ -4,6 +4,9 @@ import {
   readRuntimeSafety,
   setStopNewExposure,
 } from "../runtime/safety.ts";
+import {
+  pauseAllListingsAndConfirm,
+} from "../listings/service.ts";
 import { canonicalJson } from "../core/deterministic.ts";
 
 const command = process.argv[2] ?? "status";
@@ -16,11 +19,30 @@ const database = openDatabase(path, {
 });
 
 try {
+  let pausedListings = 0;
+
   if (command === "init") {
     initializeRuntimeSafety(database, now);
   } else if (command === "pause") {
     setStopNewExposure(database, true, reason, now);
+    pausedListings = pauseAllListingsAndConfirm(database, now);
   } else if (command === "resume") {
+    const unresolved = database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM exceptions
+          WHERE state = 'OPEN'
+        `,
+      )
+      .get() as { count: bigint };
+
+    if (unresolved.count !== 0n) {
+      throw new Error(
+        "Cannot resume new exposure while unresolved exceptions exist.",
+      );
+    }
+
     setStopNewExposure(database, false, reason, now);
   } else if (command !== "status") {
     throw new Error(
@@ -29,7 +51,10 @@ try {
   }
 
   process.stdout.write(
-    `${canonicalJson(readRuntimeSafety(database))}\n`,
+    `${canonicalJson({
+      ...readRuntimeSafety(database),
+      pausedListings,
+    })}\n`,
   );
 } finally {
   database.close();
