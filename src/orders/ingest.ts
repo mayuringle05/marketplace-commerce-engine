@@ -89,27 +89,85 @@ export function ingestMarketplaceOrder(
         canonicalJson(event.economicsSnapshot),
       );
 
-    database
-      .prepare(
-        `
-          INSERT OR IGNORE INTO order_items (
-            id,
-            order_id,
-            listing_id,
-            trade_unit_id,
-            quantity,
-            accepted_price_paise
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `,
-      )
-      .run(
-        itemId,
-        orderId,
-        listing.id,
-        tradeUnit.trade_unit_id,
-        event.quantity,
-        event.acceptedPricePaise,
+    if (orderInsert.changes === 0n) {
+      const existingOrder = database
+        .prepare(
+          `
+            SELECT immutable_economics_json
+            FROM orders
+            WHERE marketplace = ?
+              AND marketplace_order_id = ?
+          `,
+        )
+        .get(
+          event.marketplace,
+          event.marketplaceOrderId,
+        ) as
+        | { immutable_economics_json: string }
+        | undefined;
+
+      const existingItem = database
+        .prepare(
+          `
+            SELECT
+              listing_id,
+              trade_unit_id,
+              quantity,
+              accepted_price_paise
+            FROM order_items
+            WHERE order_id = ?
+          `,
+        )
+        .get(orderId) as
+        | {
+            listing_id: string;
+            trade_unit_id: string;
+            quantity: bigint;
+            accepted_price_paise: bigint;
+          }
+        | undefined;
+
+      const economicsJson = canonicalJson(
+        event.economicsSnapshot,
       );
+
+      if (
+        existingOrder === undefined ||
+        existingItem === undefined ||
+        existingOrder.immutable_economics_json !== economicsJson ||
+        existingItem.listing_id !== listing.id ||
+        existingItem.trade_unit_id !== tradeUnit.trade_unit_id ||
+        existingItem.quantity !== BigInt(event.quantity) ||
+        existingItem.accepted_price_paise !==
+          BigInt(event.acceptedPricePaise)
+      ) {
+        throw new Error(
+          "Conflicting replay for marketplace order.",
+        );
+      }
+    } else {
+      database
+        .prepare(
+          `
+            INSERT INTO order_items (
+              id,
+              order_id,
+              listing_id,
+              trade_unit_id,
+              quantity,
+              accepted_price_paise
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `,
+        )
+        .run(
+          itemId,
+          orderId,
+          listing.id,
+          tradeUnit.trade_unit_id,
+          event.quantity,
+          event.acceptedPricePaise,
+        );
+    }
 
     if (orderInsert.changes === 1n) {
       database
