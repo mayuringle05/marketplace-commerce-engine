@@ -106,10 +106,16 @@ test("two orders can share a marketplace statement without losing financial line
       count: bigint;
     }>;
 
-    assert.deepEqual(rows, [
-      { order_id: "order-a", count: 3n },
-      { order_id: "order-b", count: 3n },
-    ]);
+    assert.deepEqual(
+      rows.map((row) => ({
+        order_id: row.order_id,
+        count: row.count,
+      })),
+      [
+        { order_id: "order-a", count: 3n },
+        { order_id: "order-b", count: 3n },
+      ],
+    );
   } finally {
     database.close();
   }
