@@ -3,11 +3,19 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { openDatabase } from "../db/database.ts";
 import { initializeRuntimeSafety } from "../runtime/safety.ts";
 import { runWorkerOnce } from "../runtime/worker.ts";
+import {
+  SimulatedSupplierPurchaseAdapter,
+} from "../supplier/simulated-purchase.ts";
 
 const path = process.argv[2] ?? "data/commerce.sqlite";
+const providerPath =
+  process.argv[3] ?? "data/simulated-supplier.sqlite";
 const database = openDatabase(path, {
   appliedAt: new Date().toISOString(),
 });
+const supplier = new SimulatedSupplierPurchaseAdapter(
+  providerPath,
+);
 
 initializeRuntimeSafety(database, new Date().toISOString());
 
@@ -28,6 +36,7 @@ try {
 
     const ran = runWorkerOnce(
       database,
+      supplier,
       `worker-${process.pid}`,
       asOf,
       leaseUntil,
@@ -38,5 +47,6 @@ try {
     }
   }
 } finally {
+  supplier.close();
   database.close();
 }
