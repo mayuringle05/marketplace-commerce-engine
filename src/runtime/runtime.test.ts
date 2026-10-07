@@ -35,6 +35,7 @@ import {
   importChatGptDecisionFile,
   writeResearchPacketFile,
 } from "../research/chatgpt-handoff.ts";
+import { seedSingleSkuFixture } from "../test/commerce-fixture.ts";
 
 const T0 = "2026-10-07T00:00:00.000Z";
 
@@ -167,7 +168,7 @@ test("account lock fencing rejects an expired owner after takeover", () => {
   }
 });
 
-test("marketplace cursor advances only after every page succeeds", () => {
+test("marketplace cursor advances only after every page succeeds", async () => {
   const database = openDatabase(":memory:", {
     appliedAt: T0,
   });
@@ -203,20 +204,19 @@ test("marketplace cursor advances only after every page succeeds", () => {
       },
     };
 
-    assert.throws(
-      () =>
-        syncMarketplaceReadStream(
-          database,
-          "SIM",
-          "orders",
-          source,
-          "2026-10-07T00:01:00.000Z",
-        ),
+    await assert.rejects(
+      syncMarketplaceReadStream(
+        database,
+        "SIM",
+        "orders",
+        source,
+        "2026-10-07T00:01:00.000Z",
+      ),
       /simulated rate limit/,
     );
 
     const eventCount = database
-      .prepare("SELECT COUNT(*) AS count FROM marketplace_events")
+      .prepare("SELECT COUNT(*) AS count FROM marketplace_events_v2")
       .get() as { count: bigint };
     const cursorCount = database
       .prepare("SELECT COUNT(*) AS count FROM marketplace_cursors")
@@ -264,7 +264,7 @@ test("marketplace cursor advances only after every page succeeds", () => {
       },
     };
 
-    const result = syncMarketplaceReadStream(
+    const result = await syncMarketplaceReadStream(
       database,
       "SIM",
       "orders",
@@ -295,19 +295,30 @@ test("marketplace cursor advances only after every page succeeds", () => {
   }
 });
 
-test("ChatGPT handoff is file-based research only and imports unapproved", () => {
+test("ChatGPT decision requires current exported packet provenance and remains unapproved", () => {
   const database = openDatabase(":memory:", {
     appliedAt: T0,
   });
   const directory = mkdtempSync(join(tmpdir(), "cosmo-research-"));
 
   try {
+    seedSingleSkuFixture(database);
     const packet = buildResearchPacket(
       database,
-      "2026-10-07T00:03:00.000Z",
+      "2026-10-07T00:13:00.000Z",
     );
+    assert.equal(packet.opportunities.length, 1);
+
+    const subjectId = packet.opportunities[0]?.id;
+    assert.ok(subjectId !== undefined);
+
     const packetPath = join(directory, "packet.json");
-    const inputHash = writeResearchPacketFile(packetPath, packet);
+    const inputHash = writeResearchPacketFile(
+      database,
+      packetPath,
+      packet,
+      "2026-10-07T01:00:00.000Z",
+    );
 
     const rawPacket = readFileSync(packetPath, "utf8");
     assert.match(rawPacket, /"schemaVersion":1/);
@@ -316,18 +327,21 @@ test("ChatGPT handoff is file-based research only and imports unapproved", () =>
     const decision = {
       schemaVersion: 1,
       decisionType: "RESEARCH_RECOMMENDATION",
-      subjectId: "opportunity-demo",
+      subjectId,
       inputHash,
       recommendation: "INVESTIGATE",
       rationale: "Check exact fees and supplier SLA before approval.",
     };
-    const json = JSON.stringify(decision);
-    writeFileSync(decisionPath, json, "utf8");
+    writeFileSync(
+      decisionPath,
+      JSON.stringify(decision),
+      "utf8",
+    );
 
     const id = importChatGptDecisionFile(
       database,
       decisionPath,
-      "2026-10-07T00:04:00.000Z",
+      "2026-10-07T00:14:00.000Z",
     );
 
     const row = database
@@ -341,13 +355,67 @@ test("ChatGPT handoff is file-based research only and imports unapproved", () =>
       .get(id) as { approved_by_owner: bigint };
 
     assert.equal(row.approved_by_owner, 0n);
+
+    writeFileSync(
+      decisionPath,
+      JSON.stringify({
+        ...decision,
+        inputHash: "0".repeat(64),
+      }),
+      "utf8",
+    );
+    assert.throws(
+      () =>
+        importChatGptDecisionFile(
+          database,
+          decisionPath,
+          "2026-10-07T00:14:00.000Z",
+        ),
+      /does not reference a current exported research packet/,
+    );
+
+    writeFileSync(
+      decisionPath,
+      JSON.stringify({
+        ...decision,
+        subjectId: "unknown-opportunity",
+      }),
+      "utf8",
+    );
+    assert.throws(
+      () =>
+        importChatGptDecisionFile(
+          database,
+          decisionPath,
+          "2026-10-07T00:14:00.000Z",
+        ),
+      /subject was not present/,
+    );
+
+    writeFileSync(
+      decisionPath,
+      JSON.stringify({
+        ...decision,
+        refundPaise: 100_000,
+      }),
+      "utf8",
+    );
+    assert.throws(
+      () =>
+        importChatGptDecisionFile(
+          database,
+          decisionPath,
+          "2026-10-07T00:14:00.000Z",
+        ),
+      /exact schema/,
+    );
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test("marketplace read rejects unapproved automated access", () => {
+test("marketplace read rejects unapproved automated access", async () => {
   const database = openDatabase(":memory:", {
     appliedAt: T0,
   });
@@ -364,15 +432,14 @@ test("marketplace read rejects unapproved automated access", () => {
       },
     };
 
-    assert.throws(
-      () =>
-        syncMarketplaceReadStream(
-          database,
-          "SIM",
-          "orders",
-          source,
-          T0,
-        ),
+    await assert.rejects(
+      syncMarketplaceReadStream(
+        database,
+        "SIM",
+        "orders",
+        source,
+        T0,
+      ),
       /not approved for automated access/,
     );
   } finally {
@@ -427,6 +494,136 @@ test("marketplace read honors Retry-After for safe reads", async () => {
     assert.deepEqual(slept, [3_000]);
     assert.equal(result.inserted, 1);
     assert.equal(result.finalCursor, "checkpoint-retry");
+  } finally {
+    database.close();
+  }
+});
+
+test("marketplace event identity is stream-scoped and conflicting replays fail", async () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    const sourceFor = (
+      eventType: string,
+      payload: unknown,
+      checkpoint: string,
+    ): MarketplaceReadSource => ({
+      approvedAccess: true,
+      fetchPage() {
+        return {
+          events: [
+            {
+              externalEventId: "shared-id-1",
+              eventType,
+              payload,
+              observedAt: T0,
+            },
+          ],
+          nextCursor: null,
+          checkpointCursor: checkpoint,
+        };
+      },
+    });
+
+    await syncMarketplaceReadStream(
+      database,
+      "SIM",
+      "orders",
+      sourceFor("ORDER", { order: 1 }, "orders-1"),
+      "2026-10-07T00:10:00.000Z",
+    );
+    await syncMarketplaceReadStream(
+      database,
+      "SIM",
+      "refunds",
+      sourceFor("REFUND", { refund: 1 }, "refunds-1"),
+      "2026-10-07T00:10:00.000Z",
+    );
+
+    const count = database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM marketplace_events_v2
+          WHERE external_event_id = 'shared-id-1'
+        `,
+      )
+      .get() as { count: bigint };
+    assert.equal(count.count, 2n);
+
+    await assert.rejects(
+      syncMarketplaceReadStream(
+        database,
+        "SIM",
+        "orders",
+        sourceFor("ORDER", { order: 999 }, "orders-2"),
+        "2026-10-07T00:11:00.000Z",
+      ),
+      /Conflicting replay for marketplace event/,
+    );
+
+    const cursor = database
+      .prepare(
+        `
+          SELECT cursor
+          FROM marketplace_cursors
+          WHERE marketplace = 'SIM'
+            AND stream = 'orders'
+        `,
+      )
+      .get() as { cursor: string };
+    assert.equal(cursor.cursor, "orders-1");
+  } finally {
+    database.close();
+  }
+});
+
+test("marketplace pagination cycles fail without advancing the cursor", async () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    const source: MarketplaceReadSource = {
+      approvedAccess: true,
+      fetchPage(cursor) {
+        if (cursor === null) {
+          return {
+            events: [],
+            nextCursor: "loop",
+            checkpointCursor: "checkpoint-1",
+          };
+        }
+        return {
+          events: [],
+          nextCursor: "loop",
+          checkpointCursor: "checkpoint-2",
+        };
+      },
+    };
+
+    await assert.rejects(
+      syncMarketplaceReadStream(
+        database,
+        "SIM",
+        "orders",
+        source,
+        T0,
+      ),
+      /cursor cycle detected/,
+    );
+
+    const count = database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM marketplace_cursors
+        `,
+      )
+      .get() as { count: bigint };
+    assert.equal(count.count, 0n);
   } finally {
     database.close();
   }
