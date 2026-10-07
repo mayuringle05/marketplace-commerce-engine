@@ -4,7 +4,9 @@ Deterministic, local-only marketplace commerce engine for the COSMO COMMERCE str
 
 ## Status
 
-The **local software path is end-to-end simulation complete**.
+The local end-to-end path is a **patched simulation candidate under independent safety re-audit**.
+
+The file-backed workflow and regression suite are green, but that is evidence—not permission to trade. PR #6 must not be merged as production-quality until the patched head receives a fresh independent audit.
 
 It can run this lifecycle entirely on the local machine:
 
@@ -73,7 +75,7 @@ Run the file-backed end-to-end commerce simulation:
 npm run demo:e2e -- data/local-e2e.sqlite
 ```
 
-A successful demo ends with an order in `MATURED`, a confirmed purchase, delivered shipment, zero remaining public quantity, and reconciled actual profit.
+A successful demo ends with an order in `MATURED`, a confirmed simulated purchase held in independent provider storage, delivered shipment, zero remaining public quantity, and reconciled **fixture** profit. It does not prove real fees, tax treatment, bank settlement, or commercial profitability.
 
 ## Gate 0: live-mode boundary
 
@@ -92,6 +94,8 @@ cp config/gate0.example.json config/gate0.local.json
 ```
 
 Do not mark a field true until the corresponding real commercial evidence exists.
+
+The Gate 0 JSON/CLI is a **readiness checklist, not transactional authority**. No real adapter exists today. Any future live adapter must independently require versioned, current evidence for the exact account/supplier/route plus explicit owner authorization at its mutation boundary.
 
 Gate 0 covers seller/tax setup, marketplace approval and API access, current rate card, verified supplier/invoice/dispatch/return route, real quotes and allocations, payment terms, capital/reserves, and operator coverage.
 
@@ -157,7 +161,9 @@ The live runtime does not depend on ChatGPT availability.
 
 ## Encrypted database backup
 
-The backup command creates a consistent SQLite snapshot, encrypts it with AES-256-GCM, decrypts a temporary verification copy, and runs SQLite integrity checking.
+The backup command creates a consistent SQLite snapshot, encrypts it with AES-256-GCM, decrypts a private temporary verification copy, and checks SQLite integrity, foreign keys, and expected commerce schema before atomically replacing the encrypted output. Source/output aliases are rejected.
+
+The mechanism supports a user-chosen destination, but a real **second-device/storage recovery drill is still required** before live operation.
 
 It reads the backup key from `COSMO_BACKUP_KEY_HEX` or macOS Keychain service `cosmo-commerce`, account `backup-key`.
 
@@ -182,7 +188,10 @@ The engine intentionally fails closed when:
 - a customer order is cancelled/held before supplier purchase;
 - purchase authorization has expired;
 - an external purchase result is unknown;
-- a worker/account fencing token is stale.
+- a worker/account fencing token is stale;
+- verified cash evidence is missing/stale or aggregate cash is insufficient;
+- a listing decision's exact price/evidence/latest quote no longer matches;
+- a purchase authorization is expired, consumed, cancelled, or identity/route evidence was invalidated.
 
 An unknown purchase result becomes `PAYMENT_UNKNOWN / PURCHASE_UNKNOWN` and is quarantined. It is never blindly resubmitted.
 
