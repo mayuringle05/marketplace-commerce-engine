@@ -137,7 +137,7 @@ function readIntentEvidence(
         WHERE o.id = ?
       `,
     )
-    .all(orderId) as IntentEvidence[];
+    .all(orderId) as unknown as IntentEvidence[];
 
   if (rows.length !== 1 || rows[0] === undefined) {
     throw new Error(
