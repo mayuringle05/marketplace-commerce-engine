@@ -27,7 +27,36 @@ test("runs the complete local commerce happy path to matured profit", () => {
     const poCount = database
       .prepare("SELECT COUNT(*) AS count FROM purchase_orders")
       .get() as { count: bigint };
-    const supplierOrderCount = database
+    const purchaseAuthority = database
+      .prepare(
+        `
+          SELECT
+            a.consumed_at,
+            ai.state AS intent_state
+          FROM purchase_orders po
+          JOIN purchase_authorizations a
+            ON a.id = po.authorization_id
+          JOIN action_intents ai
+            ON ai.subject_id = po.order_id
+            AND ai.payload_hash = po.payload_hash
+          WHERE po.id IN (SELECT id FROM purchase_orders LIMIT 1)
+        `,
+      )
+      .get() as {
+      consumed_at: string | null;
+      intent_state: string;
+    };
+    const pool = database
+      .prepare(
+        `
+          SELECT consumed_units
+          FROM supply_pools
+          WHERE supplier_id = 'supplier-1'
+            AND supplier_sku = 'ACME-SKU-001'
+        `,
+      )
+      .get() as { consumed_units: bigint };
+    const engineProviderRows = database
       .prepare(
         "SELECT COUNT(*) AS count FROM simulated_supplier_orders",
       )
@@ -44,7 +73,10 @@ test("runs the complete local commerce happy path to matured profit", () => {
 
     assert.equal(orderCount.count, 1n);
     assert.equal(poCount.count, 1n);
-    assert.equal(supplierOrderCount.count, 1n);
+    assert.ok(purchaseAuthority.consumed_at !== null);
+    assert.equal(purchaseAuthority.intent_state, "SUCCEEDED");
+    assert.equal(pool.consumed_units, 1n);
+    assert.equal(engineProviderRows.count, 0n);
     assert.equal(activeReservations.count, 0n);
   } finally {
     database.close();
