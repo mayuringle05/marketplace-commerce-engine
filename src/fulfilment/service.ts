@@ -2,6 +2,10 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { deterministicId } from "../core/deterministic.ts";
 import {
+  normalizeIdentifier,
+  type IdentifierType,
+} from "../identity/identifiers.ts";
+import {
   transitionOrder,
   type OrderState,
 } from "../orders/state-machine.ts";
@@ -27,14 +31,20 @@ function orderRow(
 export function confirmPack(
   database: DatabaseSync,
   orderId: string,
-  barcodeVerified: boolean,
+  scannedBarcode: string,
+  scanEvidenceRef: string,
   labelRef: string,
   carrier: string,
   trackingNumber: string,
   at: string,
 ): string {
-  if (!barcodeVerified) {
-    throw new Error("Pack confirmation requires barcode verification.");
+  if (
+    scannedBarcode.trim().length === 0 ||
+    scanEvidenceRef.trim().length === 0
+  ) {
+    throw new Error(
+      "Pack confirmation requires scanned barcode and scan evidence.",
+    );
   }
   if (labelRef.length === 0 || trackingNumber.length === 0) {
     throw new Error("Label and tracking number are required.");
@@ -54,6 +64,58 @@ export function confirmPack(
     throw new Error("Confirmed purchase order not found.");
   }
 
+  const identity = database
+    .prepare(
+      `
+        SELECT
+          t.barcode_type,
+          t.barcode_value,
+          t.mapping_status AS trade_mapping_status,
+          t.physical_verified_at,
+          m.mapping_status AS marketplace_mapping_status
+        FROM order_items i
+        JOIN packaged_trade_units t
+          ON t.id = i.trade_unit_id
+        JOIN listings l
+          ON l.id = i.listing_id
+        JOIN marketplace_catalogue_items m
+          ON m.id = l.marketplace_catalogue_item_id
+        WHERE i.order_id = ?
+      `,
+    )
+    .all(orderId) as Array<{
+    barcode_type: string | null;
+    barcode_value: string | null;
+    trade_mapping_status: string;
+    physical_verified_at: string | null;
+    marketplace_mapping_status: string;
+  }>;
+
+  if (
+    identity.length !== 1 ||
+    identity[0] === undefined ||
+    identity[0].barcode_type === null ||
+    identity[0].barcode_value === null ||
+    identity[0].trade_mapping_status !== "APPROVED" ||
+    identity[0].marketplace_mapping_status !== "APPROVED" ||
+    identity[0].physical_verified_at === null
+  ) {
+    throw new Error(
+      "Pack blocked by missing or invalidated immutable identity evidence.",
+    );
+  }
+
+  const normalized = normalizeIdentifier(
+    identity[0].barcode_type as IdentifierType,
+    scannedBarcode,
+  );
+  if (
+    !normalized.valid ||
+    normalized.normalized !== identity[0].barcode_value
+  ) {
+    throw new Error("Scanned barcode does not match the ordered trade unit.");
+  }
+
   const shipmentId = deterministicId("shipment", orderId);
 
   database.exec("BEGIN IMMEDIATE");
@@ -71,8 +133,12 @@ export function confirmPack(
             label_ref,
             handover_evidence_ref,
             created_at,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?, 'PACK_CONFIRMED', ?, NULL, ?, ?)
+            updated_at,
+            scanned_barcode,
+            scan_evidence_ref
+          ) VALUES (
+            ?, ?, ?, ?, ?, 'PACK_CONFIRMED', ?, NULL, ?, ?, ?, ?
+          )
         `,
       )
       .run(
@@ -84,6 +150,8 @@ export function confirmPack(
         labelRef,
         at,
         at,
+        normalized.normalized,
+        scanEvidenceRef,
       );
 
     transitionOrder(
