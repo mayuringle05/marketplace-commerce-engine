@@ -1121,6 +1121,43 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 15,
+    name: "stream_scoped_marketplace_events",
+    sql: `
+      CREATE TABLE marketplace_events_v2 (
+        id TEXT PRIMARY KEY,
+        marketplace TEXT NOT NULL,
+        stream TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        external_event_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        UNIQUE (
+          marketplace,
+          stream,
+          external_event_id
+        )
+      ) STRICT;
+    `,
+  },
+  {
+    version: 16,
+    name: "research_packet_provenance",
+    sql: `
+      CREATE TABLE research_packets (
+        input_hash TEXT PRIMARY KEY,
+        schema_version INTEGER NOT NULL
+          CHECK (schema_version = 1),
+        generated_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        subject_ids_json TEXT NOT NULL,
+        packet_json TEXT NOT NULL,
+        CHECK (expires_at > generated_at)
+      ) STRICT;
+    `,
+  },
 ];
 
 export function applyMigrations(
