@@ -267,26 +267,92 @@ test("second item in one marketplace order remains durably represented as a held
       quantity: 1,
     });
 
-    assert.throws(
-      () =>
-        ingestMarketplaceOrder(database, {
-          ...base,
-          marketplaceItemId: "ORDER-MULTI-ITEM-2",
-          quantity: 1,
-        }),
-      /UNIQUE constraint failed: order_items.order_id, order_items.listing_id/,
-    );
+    ingestMarketplaceOrder(database, {
+      ...base,
+      marketplaceItemId: "ORDER-MULTI-ITEM-2",
+      quantity: 1,
+    });
 
-    // Until the legacy order_items unique constraint is removed by a
-    // forward migration, the second obligation must not be silently lost.
-    // This assertion is intentionally temporary and will be replaced by
-    // a held-obligation regression in the next migration.
-    const items = database
+    const obligations = database
       .prepare(
-        "SELECT COUNT(*) AS count FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE marketplace_order_id = 'ORDER-MULTI')",
+        `
+          SELECT marketplace_item_id, state, quantity
+          FROM marketplace_order_obligations
+          WHERE order_id IN (
+            SELECT id
+            FROM orders
+            WHERE marketplace_order_id = 'ORDER-MULTI'
+          )
+          ORDER BY marketplace_item_id
+        `,
+      )
+      .all() as unknown as Array<{
+      marketplace_item_id: string;
+      state: string;
+      quantity: bigint;
+    }>;
+    const itemCount = database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM order_items
+          WHERE order_id IN (
+            SELECT id
+            FROM orders
+            WHERE marketplace_order_id = 'ORDER-MULTI'
+          )
+        `,
       )
       .get() as { count: bigint };
-    assert.equal(items.count, 1n);
+    const exception = database
+      .prepare(
+        `
+          SELECT exception_type, state
+          FROM exceptions
+          WHERE order_id IN (
+            SELECT id
+            FROM orders
+            WHERE marketplace_order_id = 'ORDER-MULTI'
+          )
+        `,
+      )
+      .get() as {
+      exception_type: string;
+      state: string;
+    };
+    const listing = database
+      .prepare(
+        `
+          SELECT observed_state, observed_quantity
+          FROM listings
+          WHERE seller_sku = 'SELLER-1'
+        `,
+      )
+      .get() as {
+      observed_state: string;
+      observed_quantity: bigint;
+    };
+
+    assert.deepEqual(obligations, [
+      {
+        marketplace_item_id: "ORDER-MULTI-ITEM-1",
+        state: "MAPPED",
+        quantity: 1n,
+      },
+      {
+        marketplace_item_id: "ORDER-MULTI-ITEM-2",
+        state: "HELD_MULTI_ITEM",
+        quantity: 1n,
+      },
+    ]);
+    assert.equal(itemCount.count, 1n);
+    assert.equal(
+      exception.exception_type,
+      "UNSUPPORTED_MULTI_ITEM_ORDER",
+    );
+    assert.equal(exception.state, "OPEN");
+    assert.equal(listing.observed_state, "PAUSED");
+    assert.equal(listing.observed_quantity, 0n);
   } finally {
     database.close();
   }
