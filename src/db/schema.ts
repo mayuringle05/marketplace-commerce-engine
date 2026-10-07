@@ -1002,6 +1002,18 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 11,
+    name: "decision_and_maturity_provenance",
+    sql: `
+      ALTER TABLE opportunities ADD COLUMN source_fresh_until TEXT;
+      ALTER TABLE orders ADD COLUMN maturity_eligible_at TEXT;
+      ALTER TABLE purchase_orders ADD COLUMN authorization_id TEXT
+        REFERENCES purchase_authorizations(id) ON DELETE RESTRICT;
+      ALTER TABLE returns ADD COLUMN receipt_evidence_ref TEXT;
+      ALTER TABLE returns ADD COLUMN recovery_evidence_ref TEXT;
+    `,
+  },
 ];
 
 export function applyMigrations(
