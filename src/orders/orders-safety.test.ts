@@ -473,3 +473,64 @@ test("new supplier snapshot does not recreate accepted or consumed stock", () =>
     database.close();
   }
 });
+
+test("two accepted orders cannot reserve more cash than the shared verified balance", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    const fixture = seedSingleSkuFixture(database, {
+      cashPaise: 80_000,
+      listingQuantity: 2,
+    });
+
+    const order1 = ingestSingleOrder(database, "CASH-1");
+    const order2 = ingestSingleOrder(database, "CASH-2");
+
+    authorizeSingleOrder(
+      database,
+      order1,
+      fixture.sourceOfferId,
+    );
+
+    assert.throws(
+      () =>
+        authorizeSingleOrder(
+          database,
+          order2,
+          fixture.sourceOfferId,
+        ),
+      /Insufficient shared verified cash/,
+    );
+
+    const reservations = database
+      .prepare(
+        `
+          SELECT
+            COUNT(*) AS count,
+            COALESCE(SUM(cash_paise), 0) AS cash
+          FROM reservations
+          WHERE status = 'ACTIVE'
+        `,
+      )
+      .get() as {
+      count: bigint;
+      cash: bigint;
+    };
+    const second = database
+      .prepare(
+        "SELECT state FROM orders WHERE id = ?",
+      )
+      .get(order2) as { state: string };
+
+    assert.equal(reservations.count, 1n);
+    assert.equal(
+      reservations.cash,
+      BigInt(fixture.peakCashPaise),
+    );
+    assert.equal(second.state, "RECEIVED");
+  } finally {
+    database.close();
+  }
+});
