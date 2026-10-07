@@ -149,6 +149,22 @@ export function consumeStockCommitments(
   }>;
 
   if (rows.length === 0) {
+    const consumed = database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM stock_commitments c
+          JOIN order_items i
+            ON i.id = c.order_item_id
+          WHERE i.order_id = ?
+            AND c.state = 'CONSUMED'
+        `,
+      )
+      .get(orderId) as { count: bigint };
+
+    if (consumed.count > 0n) {
+      return;
+    }
     throw new Error("No reserved stock commitment to consume.");
   }
 
