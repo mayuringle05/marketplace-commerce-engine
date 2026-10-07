@@ -1158,6 +1158,38 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 17,
+    name: "authoritative_marketplace_order_obligations",
+    sql: `
+      CREATE TABLE marketplace_order_obligations (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL
+          REFERENCES orders(id) ON DELETE RESTRICT,
+        marketplace_item_id TEXT NOT NULL,
+        seller_sku TEXT NOT NULL,
+        supply_pool_id TEXT NOT NULL
+          REFERENCES supply_pools(id) ON DELETE RESTRICT,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        accepted_price_paise INTEGER NOT NULL
+          CHECK (accepted_price_paise >= 0),
+        payload_hash TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (
+          state IN ('MAPPED', 'HELD_MULTI_ITEM')
+        ),
+        order_item_id TEXT
+          REFERENCES order_items(id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        UNIQUE (order_id, marketplace_item_id)
+      ) STRICT;
+
+      CREATE INDEX marketplace_obligations_pool_idx
+        ON marketplace_order_obligations(
+          supply_pool_id,
+          state
+        );
+    `,
+  },
 ];
 
 export function applyMigrations(
