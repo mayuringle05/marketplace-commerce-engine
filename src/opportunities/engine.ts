@@ -16,6 +16,8 @@ export interface OpportunityInput {
   readonly tradeUnitId: string;
   readonly sourceOfferId: string;
   readonly marketplace: string;
+  readonly approvedPricePaise: number;
+  readonly sourceFreshUntil: string;
   readonly identityClass: IdentityClass;
   readonly freshness: OfferFreshnessDecision;
   readonly routeVerified: boolean;
@@ -110,6 +112,23 @@ export function persistOpportunity(
   database: DatabaseSync,
   input: OpportunityInput,
 ): string {
+  if (
+    !Number.isSafeInteger(input.approvedPricePaise) ||
+    input.approvedPricePaise < 0
+  ) {
+    throw new Error("approvedPricePaise must be a non-negative integer.");
+  }
+  const freshUntil = new Date(input.sourceFreshUntil);
+  if (
+    Number.isNaN(freshUntil.getTime()) ||
+    freshUntil.toISOString() !== input.sourceFreshUntil
+  ) {
+    throw new Error("sourceFreshUntil must be a canonical UTC timestamp.");
+  }
+  if (input.freshness.offer === null) {
+    throw new Error("Opportunity requires a concrete source offer.");
+  }
+
   const decision = evaluateOpportunity(input);
   const id = deterministicId(
     "opp",
@@ -135,8 +154,13 @@ export function persistOpportunity(
           decision_profit_paise,
           blocking_reasons_json,
           evidence_version,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          created_at,
+          approved_price_paise,
+          required_cash_paise_per_unit,
+          source_observed_at,
+          source_valid_until,
+          source_fresh_until
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(
           trade_unit_id,
           source_offer_id,
@@ -148,7 +172,12 @@ export function persistOpportunity(
           opportunity_score = excluded.opportunity_score,
           demand_score = excluded.demand_score,
           decision_profit_paise = excluded.decision_profit_paise,
-          blocking_reasons_json = excluded.blocking_reasons_json
+          blocking_reasons_json = excluded.blocking_reasons_json,
+          approved_price_paise = excluded.approved_price_paise,
+          required_cash_paise_per_unit = excluded.required_cash_paise_per_unit,
+          source_observed_at = excluded.source_observed_at,
+          source_valid_until = excluded.source_valid_until,
+          source_fresh_until = excluded.source_fresh_until
       `,
     )
     .run(
@@ -165,6 +194,11 @@ export function persistOpportunity(
       canonicalJson(decision.blockingReasons),
       input.evidenceVersion,
       input.createdAt,
+      input.approvedPricePaise,
+      input.economics.base.peakCashRequirementPaise,
+      input.freshness.offer.observedAt,
+      input.freshness.offer.validUntil,
+      input.sourceFreshUntil,
     );
 
   return id;
