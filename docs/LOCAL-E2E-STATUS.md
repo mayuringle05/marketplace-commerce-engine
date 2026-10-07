@@ -2,7 +2,7 @@
 
 ## Current truth
 
-The software path is end-to-end complete **for deterministic local simulation**.
+The patched software path executes end to end **as a deterministic local simulation candidate**. A fresh independent re-audit of the patched PR head is still required before calling the simulation production-quality.
 
 It is not yet a live marketplace business. The repository contains no real marketplace credentials, supplier credentials, customer data, private contracts, or live production database.
 
@@ -29,7 +29,7 @@ The current branch proves:
 - PURCHASE_UNKNOWN quarantine and reconciliation without blind retry;
 - pack/barcode, label, handover, transit, delivery/RTO paths;
 - return grading and realized recovery;
-- immutable/idempotent financial events and matured profit;
+- source-line-scoped immutable financial events with changed-replay rejection and document/bank-backed fixture maturity;
 - job leases, fencing tokens, account locks, and fail-closed startup;
 - durable marketplace read cursors, full-page transactionality, event dedupe, approved-access gate, and Retry-After handling;
 - liquidity circuit breaker and global exposure pause;
@@ -49,7 +49,7 @@ CI must pass three layers:
 2. file-backed `npm run demo:e2e`
 3. fail-closed Gate 0 check
 
-The demo's reference fixture matures one delivered order and reconciles ₹215.03 of actual operating profit after its fixture costs/overhead. This value is a deterministic test fixture, not a forecast of real marketplace profit.
+The demo's reference fixture matures one delivered order and reconciles ₹215.03 from its supplied fixture documents/costs. This proves deterministic fixture reconciliation only; it is not evidence of actual marketplace profit, GST treatment, or bank settlement.
 
 ## Intentionally not claimed as complete
 
@@ -67,7 +67,7 @@ These require external evidence and therefore remain open:
 - real seller invoice process;
 - provider-specific marketplace/supplier adapters;
 - marketplace sandbox/real test order where supported;
-- actual settlement statement and bank reconciliation;
+- actual marketplace statement, supplier invoice, tax/withholding treatment, and bank reconciliation;
 - owner-approved small live pilot;
 - live return/RTO pilot evidence;
 - pilot reliability, intervention, and matured-profit metrics.
@@ -78,10 +78,11 @@ Do not enable real external mutation because the simulator is green.
 
 Real mutation may be considered only when:
 
-1. Gate 0 is fully true with evidence;
-2. an approved real connector is implemented against official/permitted access;
-3. observer-mode reconciliation passes;
-4. owner reviews the first listing/order;
-5. the pilot starts at deliberately tiny exposure.
+1. the patched technical head passes independent re-audit;
+2. Gate 0 is fully supported by versioned evidence (the boolean checklist alone is insufficient);
+3. an approved real connector is implemented against official/permitted access and enforces that evidence at its mutation boundary;
+4. observer-mode reconciliation passes;
+5. owner reviews the exact first listing/order/supplier/route/spend cap;
+6. the pilot starts at deliberately tiny exposure.
 
 The system must remain fail-closed if any of those prerequisites is unknown.
