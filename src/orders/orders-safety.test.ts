@@ -333,18 +333,25 @@ test("second item in one marketplace order remains durably represented as a held
       observed_quantity: bigint;
     };
 
-    assert.deepEqual(obligations, [
-      {
-        marketplace_item_id: "ORDER-MULTI-ITEM-1",
-        state: "MAPPED",
-        quantity: 1n,
-      },
-      {
-        marketplace_item_id: "ORDER-MULTI-ITEM-2",
-        state: "HELD_MULTI_ITEM",
-        quantity: 1n,
-      },
-    ]);
+    assert.deepEqual(
+      obligations.map((row) => ({
+        marketplace_item_id: row.marketplace_item_id,
+        state: row.state,
+        quantity: row.quantity,
+      })),
+      [
+        {
+          marketplace_item_id: "ORDER-MULTI-ITEM-1",
+          state: "MAPPED",
+          quantity: 1n,
+        },
+        {
+          marketplace_item_id: "ORDER-MULTI-ITEM-2",
+          state: "HELD_MULTI_ITEM",
+          quantity: 1n,
+        },
+      ],
+    );
     assert.equal(itemCount.count, 1n);
     assert.equal(
       exception.exception_type,
