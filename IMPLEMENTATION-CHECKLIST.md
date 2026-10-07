@@ -12,7 +12,7 @@
 - [x] Repository visibility intentionally **public for now** (owner decision)
 - [ ] Gate 0 commercial feasibility complete — **real commercial evidence still required**
 - [x] Checkpoint 1 deterministic economics complete — **merged to main; local economics validation passed and full locked CI is green**
-- [x] Local end-to-end software simulation complete — **supplier feed → identity/economics/freshness → opportunity → listing → order → reservation → PO → fulfilment → settlement → matured profit**
+- [ ] Patched local end-to-end simulation production-quality — **workflow is green; independent re-audit of the patched PR head still required**
 - [ ] V1a live observer validation complete — **real approved marketplace read path + real documents pending**
 - [ ] V1b live controlled-trading validation complete — **real owner-approved order pending**
 - [ ] V1c live bounded automatic operation complete — **promotion evidence and real supplier execution pending**
@@ -229,8 +229,8 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] Marketplace receivable tracking
 - [x] Supplier payable tracking
 - [x] Tax components tracked separately
-- [x] Bank/settlement reconciliation
-- [x] Profit based on reconciled/matured outcomes, not listed spread
+- [x] Simulated document/bank reconciliation engine with exact replay/conflict checks
+- [x] Fixture profit based on reconciled/matured economic events, not listed spread; **real statements/tax/bank evidence pending**
 
 ### V1a validation gate
 
@@ -328,12 +328,12 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 
 ### V1b validation gate
 
-- [x] Local file-backed end-to-end simulated order reaches MATURED and reconciles profit
+- [x] Local file-backed end-to-end simulated order reaches MATURED and reconciles fixture profit
 - [ ] Marketplace sandbox/test-order path — **real provider access pending**
 - [ ] Small owner-approved real order completes through settlement
 - [ ] Actual fees reconciled against forecast
 - [x] Local return/RTO reconciliation paths tested
-- [x] Local replay/fencing/unknown-side-effect tests prevent duplicate purchase and financial events; real-provider crash testing pending
+- [x] Independent simulated-provider crash/replay/fencing tests cover provider-success/local-failure and reconciliation without resubmission; **real provider contract testing pending**
 
 ---
 
@@ -386,12 +386,15 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] CLI-first local operator surface — **supersedes planned Next.js control panel per owner decision**
 - [x] Separate Node worker
 - [x] SQLite jobs table
-- [x] `launchd` supervision on Mac
+- [x] `launchd` plist generator implemented
+- [ ] Actual macOS launchd lifecycle tested on the operator Mac
 - [ ] Machine kept powered/awake while accepting real sales — **operator/hardware configuration pending**
-- [x] OS-keychain secrets
+- [x] macOS Keychain reader implemented
+- [ ] Actual Keychain retrieval exercised on the operator Mac
 - [x] Sensitive DB backups encrypted with AES-256-GCM; live credentials remain outside repo/Keychain
-- [x] Encrypted consistent DB backup to a second storage destination
-- [x] Restore drill tested
+- [x] Encrypted consistent DB backup mechanism with alias protection and verified atomic output
+- [ ] Backup/restore drill from a genuinely separate storage/device
+- [x] Disposable file restore integrity/foreign-key/schema drill tested
 
 ### Local operator surface
 
@@ -399,7 +402,7 @@ This gate follows the strategy's pre-build commercial acceptance sheet. Live con
 - [x] Exposure status / pause / resume CLI
 - [x] Research export/import CLI
 - [x] Worker one-shot / supervised loop commands
-- [x] Gate 0 readiness CLI
+- [x] Gate 0 readiness CLI — **status only; not live transactional authority**
 - [x] Encrypted backup/integrity CLI
 - [x] No ambiguous “retry everything” command exists
 
