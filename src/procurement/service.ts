@@ -542,6 +542,70 @@ function assertExecutionStillValid(
   }
 }
 
+function rejectUnspentIntent(
+  database: DatabaseSync,
+  poId: string,
+  nextOrderState: "CUSTOMER_CANCELLED" | "SLA_BREACH",
+  reason: string,
+  at: string,
+): void {
+  const row = readExecutionRow(database, poId);
+  if (
+    row.po_state !== "INTENT_RECORDED" ||
+    row.order_state !== "PO_INTENT_RECORDED" ||
+    row.consumed_at !== null
+  ) {
+    throw new Error("Purchase intent is no longer provably unspent.");
+  }
+
+  database
+    .prepare(
+      `
+        UPDATE purchase_orders
+        SET
+          state = 'REJECTED',
+          version = version + 1,
+          updated_at = ?
+        WHERE id = ?
+          AND state = 'INTENT_RECORDED'
+      `,
+    )
+    .run(at, poId);
+
+  database
+    .prepare(
+      `
+        UPDATE action_intents
+        SET
+          state = 'REJECTED',
+          updated_at = ?
+        WHERE action_type = 'PURCHASE'
+          AND subject_id = ?
+          AND payload_hash = ?
+          AND state = 'RECORDED'
+      `,
+    )
+    .run(at, row.order_id, row.payload_hash);
+
+  transitionOrder(
+    database,
+    row.order_id,
+    "PO_INTENT_RECORDED",
+    Number(row.order_version),
+    nextOrderState,
+    at,
+  );
+  releaseReservation(database, row.order_id, at);
+
+  appendAuditEvent(database, {
+    eventType: "PURCHASE_INTENT_REJECTED_BEFORE_PROVIDER",
+    subjectType: "purchase_order",
+    subjectId: poId,
+    payload: { reason, nextOrderState },
+    occurredAt: at,
+  });
+}
+
 function markPurchaseUnknown(
   database: DatabaseSync,
   poId: string,
@@ -894,6 +958,39 @@ export function submitPurchaseOnce(
         row.consumed_at !== null
       ) {
         throw new Error("Purchase authority was already consumed.");
+      }
+
+      const submittedMsInside = assertCanonicalUtcTimestamp(
+        submittedAt,
+        "submittedAt",
+      );
+      const expiryMsInside = assertCanonicalUtcTimestamp(
+        row.authorization_expires_at,
+        "authorizationExpiresAt",
+      );
+
+      if (submittedMsInside >= expiryMsInside) {
+        rejectUnspentIntent(
+          database,
+          poId,
+          "SLA_BREACH",
+          "PURCHASE_AUTHORIZATION_EXPIRED",
+          submittedAt,
+        );
+        database.exec("COMMIT");
+        return;
+      }
+
+      if (row.remote_status !== "ACCEPTED") {
+        rejectUnspentIntent(
+          database,
+          poId,
+          "CUSTOMER_CANCELLED",
+          "MARKETPLACE_ORDER_NOT_ACCEPTED",
+          submittedAt,
+        );
+        database.exec("COMMIT");
+        return;
       }
 
       assertExecutionStillValid(row, submittedAt);
