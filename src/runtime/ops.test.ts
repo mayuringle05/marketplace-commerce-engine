@@ -189,7 +189,12 @@ test("encrypted backup rejects wrong keys and tampering", () => {
     );
 
     const tampered = Buffer.from(readFileSync(encryptedPath));
-    tampered[tampered.length - 1] ^= 0xff;
+    const lastIndex = tampered.length - 1;
+    if (lastIndex < 0) {
+      throw new Error("Encrypted fixture unexpectedly empty.");
+    }
+    tampered[lastIndex] =
+      (tampered[lastIndex] ?? 0) ^ 0xff;
     writeFileSync(tamperedPath, tampered);
 
     assert.throws(
