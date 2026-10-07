@@ -1205,8 +1205,35 @@ export function applyMigrations(
   `);
 
   const appliedRows = database
-    .prepare("SELECT version FROM schema_migrations ORDER BY version")
-    .all() as Array<{ version: bigint }>;
+    .prepare(
+      "SELECT version, name FROM schema_migrations ORDER BY version",
+    )
+    .all() as unknown as Array<{
+    version: bigint;
+    name: string;
+  }>;
+
+  const knownByVersion = new Map(
+    MIGRATIONS.map((migration) => [
+      migration.version,
+      migration.name,
+    ]),
+  );
+
+  for (const row of appliedRows) {
+    const version = Number(row.version);
+    const expectedName = knownByVersion.get(version);
+    if (expectedName === undefined) {
+      throw new Error(
+        `Database schema version ${version} is unknown to this binary.`,
+      );
+    }
+    if (expectedName !== row.name) {
+      throw new Error(
+        `Database migration ${version} name mismatch: expected ${expectedName}, found ${row.name}.`,
+      );
+    }
+  }
 
   const applied = new Set(
     appliedRows.map((row) => Number(row.version)),
