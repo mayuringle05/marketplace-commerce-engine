@@ -59,7 +59,7 @@ function insertMinimumCatalogue(database: ReturnType<typeof openDatabase>) {
     );
 }
 
-test("applies each V1a migration exactly once", () => {
+test("applies every known migration exactly once", () => {
   const database = openDatabase(":memory:", {
     appliedAt: TEST_TIMESTAMP,
   });
@@ -71,7 +71,7 @@ test("applies each V1a migration exactly once", () => {
       .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
       .get() as { count: bigint };
 
-    assert.equal(row.count, 3n);
+    assert.equal(row.count, 18n);
   } finally {
     database.close();
   }
@@ -326,6 +326,157 @@ test("persists exact integer paise and allocation values", () => {
     assert.equal(row.tax_rate_bps, 1_800n);
     assert.equal(row.allocated_units, 5n);
     assert.equal(row.available_units, 3n);
+  } finally {
+    database.close();
+  }
+});
+
+test("database guards reject invalid order states and immutable mutations", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: TEST_TIMESTAMP,
+  });
+
+  try {
+    assert.throws(
+      () =>
+        database
+          .prepare(
+            `
+              INSERT INTO orders (
+                id,
+                marketplace,
+                marketplace_order_id,
+                state,
+                version,
+                received_at,
+                updated_at,
+                immutable_economics_json
+              ) VALUES (
+                'bad-order',
+                'SIM',
+                'BAD-REMOTE',
+                'NOT_A_REAL_STATE',
+                1,
+                ?,
+                ?,
+                '{}'
+              )
+            `,
+          )
+          .run(TEST_TIMESTAMP, TEST_TIMESTAMP),
+      /invalid order state/,
+    );
+
+    database
+      .prepare(
+        `
+          INSERT INTO orders (
+            id,
+            marketplace,
+            marketplace_order_id,
+            state,
+            version,
+            received_at,
+            updated_at,
+            immutable_economics_json
+          ) VALUES (
+            'order-immutable',
+            'SIM',
+            'REMOTE-IMMUTABLE',
+            'RECEIVED',
+            1,
+            ?,
+            ?,
+            '{"profit":100}'
+          )
+        `,
+      )
+      .run(TEST_TIMESTAMP, TEST_TIMESTAMP);
+
+    assert.throws(
+      () =>
+        database
+          .prepare(
+            `
+              UPDATE orders
+              SET immutable_economics_json = '{"profit":0}'
+              WHERE id = 'order-immutable'
+            `,
+          )
+          .run(),
+      /immutable order economics/,
+    );
+
+    database
+      .prepare(
+        `
+          INSERT INTO ledger_entries (
+            id,
+            order_id,
+            external_event_id,
+            entry_type,
+            amount_paise,
+            recognized,
+            provisional,
+            source_ref,
+            event_at,
+            created_at
+          ) VALUES (
+            'ledger-immutable',
+            'order-immutable',
+            'EVENT-IMMUTABLE',
+            'MARKETPLACE_FEE',
+            -100,
+            1,
+            0,
+            'statement',
+            ?,
+            ?
+          )
+        `,
+      )
+      .run(TEST_TIMESTAMP, TEST_TIMESTAMP);
+
+    assert.throws(
+      () =>
+        database
+          .prepare(
+            `
+              UPDATE ledger_entries
+              SET amount_paise = -200
+              WHERE id = 'ledger-immutable'
+            `,
+          )
+          .run(),
+      /immutable ledger entry/,
+    );
+  } finally {
+    database.close();
+  }
+});
+
+test("refuses a database with migration history unknown to this binary", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: TEST_TIMESTAMP,
+  });
+
+  try {
+    database
+      .prepare(
+        `
+          INSERT INTO schema_migrations (
+            version,
+            name,
+            applied_at
+          ) VALUES (999, 'future_migration', ?)
+        `,
+      )
+      .run(TEST_TIMESTAMP);
+
+    assert.throws(
+      () => applyMigrations(database, TEST_TIMESTAMP),
+      /schema version 999 is unknown to this binary/,
+    );
   } finally {
     database.close();
   }
