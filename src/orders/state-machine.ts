@@ -35,7 +35,13 @@ export type OrderState = (typeof ORDER_STATES)[number];
 
 const ALLOWED: Readonly<Record<OrderState, readonly OrderState[]>> = {
   RECEIVED: ["HELD", "CUSTOMER_CANCELLED"],
-  HELD: ["RESERVED", "CUSTOMER_CANCELLED"],
+  HELD: [
+    "RESERVED",
+    "CUSTOMER_CANCELLED",
+    "IDENTITY_CONFLICT",
+    "PRICE_BREACH",
+    "SLA_BREACH",
+  ],
   RESERVED: ["VALIDATING", "CUSTOMER_CANCELLED"],
   VALIDATING: [
     "AUTHORIZED",
