@@ -59,7 +59,7 @@ function insertMinimumCatalogue(database: ReturnType<typeof openDatabase>) {
     );
 }
 
-test("applies each V1a migration exactly once", () => {
+test("applies every known migration exactly once", () => {
   const database = openDatabase(":memory:", {
     appliedAt: TEST_TIMESTAMP,
   });
@@ -449,6 +449,33 @@ test("database guards reject invalid order states and immutable mutations", () =
           )
           .run(),
       /immutable ledger entry/,
+    );
+  } finally {
+    database.close();
+  }
+});
+
+test("refuses a database with migration history unknown to this binary", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: TEST_TIMESTAMP,
+  });
+
+  try {
+    database
+      .prepare(
+        `
+          INSERT INTO schema_migrations (
+            version,
+            name,
+            applied_at
+          ) VALUES (999, 'future_migration', ?)
+        `,
+      )
+      .run(TEST_TIMESTAMP);
+
+    assert.throws(
+      () => applyMigrations(database, TEST_TIMESTAMP),
+      /schema version 999 is unknown to this binary/,
     );
   } finally {
     database.close();
