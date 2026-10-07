@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { openDatabase } from "../db/database.ts";
 import {
+  reconcileDeliveredKeptOrder,
   recognizedOrderProfitPaise,
   recordFinancialEvent,
 } from "./ledger.ts";
@@ -171,6 +172,55 @@ test("duplicate external financial event cannot double-count profit", () => {
       .get() as { count: bigint };
 
     assert.equal(row.count, 1n);
+  } finally {
+    database.close();
+  }
+});
+
+test("delivered order cannot mature before the explicit return boundary", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    insertOrder(database, "order-early", "DELIVERED");
+
+    assert.throws(
+      () =>
+        reconcileDeliveredKeptOrder(database, {
+          orderId: "order-early",
+          customerRevenuePaise: 67_712,
+          marketplaceFeePaise: 10_000,
+          logisticsPaise: 2_500,
+          supplierPayablePaise: 30_509,
+          packingPaise: 2_000,
+          overheadPaise: 1_200,
+          settlementCashPaise: 64_750,
+          sourceRef: "EARLY-SETTLEMENT-1",
+          maturityEligibleAt: "2026-10-20T00:00:00.000Z",
+          settledAt: "2026-10-19T23:59:59.000Z",
+        }),
+      /cannot mature before the return\/maturity boundary/,
+    );
+
+    const order = database
+      .prepare(
+        "SELECT state, version FROM orders WHERE id = 'order-early'",
+      )
+      .get() as { state: string; version: bigint };
+    const ledger = database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM ledger_entries
+          WHERE order_id = 'order-early'
+        `,
+      )
+      .get() as { count: bigint };
+
+    assert.equal(order.state, "DELIVERED");
+    assert.equal(order.version, 1n);
+    assert.equal(ledger.count, 0n);
   } finally {
     database.close();
   }
