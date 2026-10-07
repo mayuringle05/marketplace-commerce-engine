@@ -131,7 +131,7 @@ function readAuthorityEvidence(
         WHERE ord.id = ?
       `,
     )
-    .all(orderId) as AuthorityEvidence[];
+    .all(orderId) as unknown as AuthorityEvidence[];
 
   if (rows.length !== 1 || rows[0] === undefined) {
     throw new Error(
