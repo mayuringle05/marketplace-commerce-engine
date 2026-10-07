@@ -1,6 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { deterministicId } from "../core/deterministic.ts";
+import {
+  assertCanonicalUtcTimestamp,
+  deterministicId,
+} from "../core/deterministic.ts";
 import {
   normalizeIdentifier,
   type IdentifierType,
@@ -264,14 +267,50 @@ export function markShipmentOutcome(
   orderId: string,
   outcome: "DELIVERED" | "RTO" | "LOST" | "DAMAGED",
   at: string,
+  maturityEligibleAt: string | null = null,
 ): void {
   const order = orderRow(database, orderId);
   if (order.state !== "IN_TRANSIT") {
     throw new Error("Shipment outcome requires IN_TRANSIT order.");
   }
 
+  if (outcome === "DELIVERED") {
+    if (maturityEligibleAt === null) {
+      throw new Error(
+        "Delivered shipment requires a persisted maturity boundary.",
+      );
+    }
+    const deliveredMs = assertCanonicalUtcTimestamp(at, "deliveredAt");
+    const maturityMs = assertCanonicalUtcTimestamp(
+      maturityEligibleAt,
+      "maturityEligibleAt",
+    );
+    if (maturityMs <= deliveredMs) {
+      throw new Error(
+        "Maturity boundary must be after delivery.",
+      );
+    }
+  } else if (maturityEligibleAt !== null) {
+    throw new Error(
+      "Only DELIVERED outcome may set a maturity boundary.",
+    );
+  }
+
   database.exec("BEGIN IMMEDIATE");
   try {
+    if (outcome === "DELIVERED") {
+      database
+        .prepare(
+          `
+            UPDATE orders
+            SET maturity_eligible_at = ?
+            WHERE id = ?
+              AND maturity_eligible_at IS NULL
+          `,
+        )
+        .run(maturityEligibleAt, orderId);
+    }
+
     database
       .prepare(
         `
