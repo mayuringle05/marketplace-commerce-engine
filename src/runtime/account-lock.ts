@@ -113,3 +113,30 @@ export function assertCurrentAccountLock(
     throw new Error("Stale account fencing token.");
   }
 }
+
+export function releaseAccountLock(
+  database: DatabaseSync,
+  lock: AccountLock,
+  releasedAt: string,
+): void {
+  const result = database
+    .prepare(
+      `
+        DELETE FROM account_locks
+        WHERE account_scope = ?
+          AND owner = ?
+          AND fencing_token = ?
+      `,
+    )
+    .run(
+      lock.accountScope,
+      lock.owner,
+      lock.fencingToken,
+    );
+
+  if (result.changes !== 1n) {
+    throw new Error(
+      `Cannot release stale account lock at ${releasedAt}.`,
+    );
+  }
+}
