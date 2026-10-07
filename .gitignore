@@ -15,3 +15,10 @@ backups/
 secrets/
 
 config/gate0.local.json
+
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite.enc
+*.enc
+.cosmo-backup-*/
