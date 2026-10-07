@@ -1,11 +1,16 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { deterministicId } from "../core/deterministic.ts";
+import {
+  assertCanonicalUtcTimestamp,
+  deterministicId,
+} from "../core/deterministic.ts";
+import { readCashAvailability } from "../cash/state.ts";
 import {
   readSimulatedListing,
   upsertSimulatedListing,
 } from "../marketplace/simulated.ts";
 import { readRuntimeSafety } from "../runtime/safety.ts";
+import { readSupplyPoolCapacity } from "../supplier/pools.ts";
 
 export interface ListingSyncInput {
   readonly marketplace: string;
@@ -15,26 +20,196 @@ export interface ListingSyncInput {
   readonly sourceOfferId: string;
   readonly pricePaise: number;
   readonly requestedQuantity: number;
-  readonly cashExposureLimitUnits: number;
   readonly updatedAt: string;
 }
 
-function activeReservedUnits(
+interface ListingGateRow {
+  readonly decision_state: string;
+  readonly opportunity_marketplace: string;
+  readonly opportunity_product_id: string;
+  readonly opportunity_trade_unit_id: string;
+  readonly opportunity_source_offer_id: string;
+  readonly approved_price_paise: bigint | null;
+  readonly required_cash_paise_per_unit: bigint | null;
+  readonly source_fresh_until: string | null;
+  readonly source_valid_until: string | null;
+  readonly mapping_trade_unit_id: string;
+  readonly identity_class: string;
+  readonly marketplace_mapping_status: string;
+  readonly trade_unit_mapping_status: string;
+  readonly physical_verified_at: string | null;
+  readonly trade_unit_product_id: string;
+  readonly source_product_id: string;
+  readonly supplier_status: string;
+  readonly route_active: bigint;
+  readonly single_unit_dispatch_verified: bigint;
+  readonly return_route_verified: bigint;
+  readonly source_valid_until_actual: string;
+  readonly packed_weight_grams: bigint | null;
+  readonly package_length_mm: bigint | null;
+  readonly package_width_mm: bigint | null;
+  readonly package_height_mm: bigint | null;
+  readonly pool_id: string;
+  readonly latest_offer_id: string | null;
+}
+
+function loadListingGate(
   database: DatabaseSync,
-  sourceOfferId: string,
-): bigint {
+  input: ListingSyncInput,
+): ListingGateRow {
   const row = database
     .prepare(
       `
-        SELECT COALESCE(SUM(units), 0) AS units
-        FROM reservations
-        WHERE source_offer_id = ?
-          AND status = 'ACTIVE'
+        SELECT
+          o.decision_state,
+          o.marketplace AS opportunity_marketplace,
+          o.product_id AS opportunity_product_id,
+          o.trade_unit_id AS opportunity_trade_unit_id,
+          o.source_offer_id AS opportunity_source_offer_id,
+          o.approved_price_paise,
+          o.required_cash_paise_per_unit,
+          o.source_fresh_until,
+          o.source_valid_until,
+          m.trade_unit_id AS mapping_trade_unit_id,
+          m.identity_class,
+          m.mapping_status AS marketplace_mapping_status,
+          t.mapping_status AS trade_unit_mapping_status,
+          t.physical_verified_at,
+          t.product_id AS trade_unit_product_id,
+          s.product_id AS source_product_id,
+          supplier.status AS supplier_status,
+          route.active AS route_active,
+          route.single_unit_dispatch_verified,
+          route.return_route_verified,
+          s.valid_until AS source_valid_until_actual,
+          s.packed_weight_grams,
+          s.package_length_mm,
+          s.package_width_mm,
+          s.package_height_mm,
+          p.id AS pool_id,
+          p.latest_offer_id
+        FROM opportunities o
+        JOIN marketplace_catalogue_items m
+          ON m.id = ?
+        JOIN packaged_trade_units t
+          ON t.id = m.trade_unit_id
+        JOIN source_offers s
+          ON s.id = o.source_offer_id
+        JOIN suppliers supplier
+          ON supplier.id = s.supplier_id
+        JOIN fulfilment_routes route
+          ON route.id = s.fulfilment_route_id
+        JOIN source_offer_supply_pools link
+          ON link.offer_id = s.id
+        JOIN supply_pools p
+          ON p.id = link.pool_id
+        WHERE o.id = ?
       `,
     )
-    .get(sourceOfferId) as { units: bigint };
+    .get(
+      input.marketplaceCatalogueItemId,
+      input.opportunityId,
+    ) as ListingGateRow | undefined;
 
-  return row.units;
+  if (row === undefined) {
+    throw new Error("Listing evidence bundle is incomplete.");
+  }
+  return row;
+}
+
+function assertListingGate(
+  input: ListingSyncInput,
+  row: ListingGateRow,
+): bigint {
+  const updatedMs = assertCanonicalUtcTimestamp(
+    input.updatedAt,
+    "updatedAt",
+  );
+
+  if (
+    !Number.isSafeInteger(input.pricePaise) ||
+    input.pricePaise < 0 ||
+    !Number.isSafeInteger(input.requestedQuantity) ||
+    input.requestedQuantity < 0
+  ) {
+    throw new Error("Listing price and quantity must be non-negative integers.");
+  }
+
+  if (
+    row.decision_state !== "LIST" ||
+    row.opportunity_source_offer_id !== input.sourceOfferId ||
+    row.opportunity_marketplace !== input.marketplace ||
+    row.opportunity_trade_unit_id !== row.mapping_trade_unit_id ||
+    row.opportunity_product_id !== row.trade_unit_product_id ||
+    row.opportunity_product_id !== row.source_product_id
+  ) {
+    throw new Error(
+      "Listing opportunity, product, trade unit, source offer, or channel does not match.",
+    );
+  }
+
+  if (
+    row.approved_price_paise === null ||
+    row.approved_price_paise !== BigInt(input.pricePaise)
+  ) {
+    throw new Error(
+      "Listing price is not the exact price approved by underwriting.",
+    );
+  }
+
+  if (
+    row.required_cash_paise_per_unit === null ||
+    row.required_cash_paise_per_unit <= 0n
+  ) {
+    throw new Error("Opportunity is missing per-unit cash requirement.");
+  }
+
+  if (
+    row.source_fresh_until === null ||
+    row.source_valid_until === null ||
+    updatedMs >= new Date(row.source_fresh_until).getTime() ||
+    updatedMs >= new Date(row.source_valid_until).getTime() ||
+    updatedMs >= new Date(row.source_valid_until_actual).getTime()
+  ) {
+    throw new Error("Listing source evidence is stale or expired.");
+  }
+
+  if (row.latest_offer_id !== input.sourceOfferId) {
+    throw new Error(
+      "Listing source offer is no longer the latest supplier snapshot.",
+    );
+  }
+
+  if (
+    row.supplier_status !== "verified" ||
+    row.route_active !== 1n ||
+    row.single_unit_dispatch_verified !== 1n ||
+    row.return_route_verified !== 1n
+  ) {
+    throw new Error("Supplier or fulfilment route is not currently approved.");
+  }
+
+  if (
+    !["A", "B"].includes(row.identity_class) ||
+    row.marketplace_mapping_status !== "APPROVED" ||
+    row.trade_unit_mapping_status !== "APPROVED" ||
+    row.physical_verified_at === null
+  ) {
+    throw new Error(
+      "Listing requires approved A/B mapping with physical verification.",
+    );
+  }
+
+  if (
+    row.packed_weight_grams === null ||
+    row.package_length_mm === null ||
+    row.package_width_mm === null ||
+    row.package_height_mm === null
+  ) {
+    throw new Error("Listing source is missing package evidence.");
+  }
+
+  return row.required_cash_paise_per_unit;
 }
 
 export function syncListingToSimulatedMarketplace(
@@ -48,100 +223,75 @@ export function syncListingToSimulatedMarketplace(
     );
   }
 
-  const opportunity = database
-    .prepare(
-      `
-        SELECT decision_state, source_offer_id
-        FROM opportunities
-        WHERE id = ?
-      `,
-    )
-    .get(input.opportunityId) as
-    | { decision_state: string; source_offer_id: string }
-    | undefined;
-
-  if (
-    opportunity === undefined ||
-    opportunity.decision_state !== "LIST" ||
-    opportunity.source_offer_id !== input.sourceOfferId
-  ) {
-    throw new Error("Listing requires a persisted LIST opportunity.");
-  }
-
-  const mapping = database
-    .prepare(
-      `
-        SELECT
-          m.identity_class,
-          m.mapping_status AS marketplace_mapping_status,
-          t.mapping_status AS trade_unit_mapping_status,
-          t.physical_verified_at
-        FROM marketplace_catalogue_items m
-        JOIN packaged_trade_units t
-          ON t.id = m.trade_unit_id
-        WHERE m.id = ?
-      `,
-    )
-    .get(input.marketplaceCatalogueItemId) as
-    | {
-        identity_class: string;
-        marketplace_mapping_status: string;
-        trade_unit_mapping_status: string;
-        physical_verified_at: string | null;
-      }
-    | undefined;
-
-  if (
-    mapping === undefined ||
-    !["A", "B"].includes(mapping.identity_class) ||
-    mapping.marketplace_mapping_status !== "APPROVED" ||
-    mapping.trade_unit_mapping_status !== "APPROVED" ||
-    mapping.physical_verified_at === null
-  ) {
-    throw new Error(
-      "Listing requires approved A/B mapping with physical verification.",
-    );
-  }
-
-  const offer = database
-    .prepare(
-      `
-        SELECT allocated_units, available_units
-        FROM source_offers
-        WHERE id = ?
-      `,
-    )
-    .get(input.sourceOfferId) as
-    | { allocated_units: bigint; available_units: bigint }
-    | undefined;
-
-  if (offer === undefined) {
-    throw new Error("Source offer not found.");
-  }
-
-  const reserved = activeReservedUnits(database, input.sourceOfferId);
-  const safetyUnits = 1n;
-  const sourceCapacity =
-    offer.allocated_units - reserved - safetyUnits;
-  const availableCapacity =
-    offer.available_units - reserved - safetyUnits;
-  const requested = BigInt(input.requestedQuantity);
-  const cashLimit = BigInt(input.cashExposureLimitUnits);
-
-  const publicQuantity = [
-    sourceCapacity,
-    availableCapacity,
-    requested,
-    cashLimit,
-  ].reduce((minimum, value) => (value < minimum ? value : minimum));
-
-  const safeQuantity = publicQuantity > 0n ? publicQuantity : 0n;
-  const desiredState = safeQuantity > 0n ? "ACTIVE" : "PAUSED";
+  const gate = loadListingGate(database, input);
+  const requiredCashPerUnit = assertListingGate(input, gate);
   const id = deterministicId(
     "listing",
     input.marketplace,
     input.sellerSku,
   );
+
+  const existing = database
+    .prepare(
+      `
+        SELECT id, updated_at
+        FROM listings
+        WHERE marketplace = ?
+          AND seller_sku = ?
+      `,
+    )
+    .get(input.marketplace, input.sellerSku) as
+    | { id: string; updated_at: string }
+    | undefined;
+
+  if (
+    existing !== undefined &&
+    input.updatedAt < existing.updated_at
+  ) {
+    throw new Error("Stale listing mutation rejected.");
+  }
+
+  const otherPoolListing = database
+    .prepare(
+      `
+        SELECT id
+        FROM listings
+        WHERE supply_pool_id = ?
+          AND id != ?
+        LIMIT 1
+      `,
+    )
+    .get(gate.pool_id, id);
+
+  if (otherPoolListing !== undefined) {
+    throw new Error(
+      "V1 supply pool is already exposed on another listing/channel.",
+    );
+  }
+
+  const stock = readSupplyPoolCapacity(
+    database,
+    gate.pool_id,
+    1n,
+  );
+  const cash = readCashAvailability(
+    database,
+    input.updatedAt,
+    existing?.id ?? null,
+  );
+
+  const cashCapacity =
+    cash.uncommittedCashPaise / requiredCashPerUnit;
+  const requested = BigInt(input.requestedQuantity);
+  const safeQuantity = [
+    stock.publicCapacityUnits,
+    cashCapacity,
+    requested,
+  ].reduce((minimum, value) =>
+    value < minimum ? value : minimum,
+  );
+  const desiredState =
+    safeQuantity > 0n ? "ACTIVE" : "PAUSED";
 
   database
     .prepare(
@@ -160,13 +310,22 @@ export function syncListingToSimulatedMarketplace(
           observed_state,
           remote_version,
           version,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 'UNKNOWN', NULL, 1, ?)
+          updated_at,
+          supply_pool_id,
+          opportunity_id
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, NULL, NULL,
+          ?, 'UNKNOWN', NULL, 1, ?, ?, ?
+        )
         ON CONFLICT(marketplace, seller_sku) DO UPDATE SET
+          marketplace_catalogue_item_id =
+            excluded.marketplace_catalogue_item_id,
           source_offer_id = excluded.source_offer_id,
           desired_price_paise = excluded.desired_price_paise,
           desired_quantity = excluded.desired_quantity,
           desired_state = excluded.desired_state,
+          supply_pool_id = excluded.supply_pool_id,
+          opportunity_id = excluded.opportunity_id,
           version = listings.version + 1,
           updated_at = excluded.updated_at
       `,
@@ -181,6 +340,8 @@ export function syncListingToSimulatedMarketplace(
       safeQuantity,
       desiredState,
       input.updatedAt,
+      gate.pool_id,
+      input.opportunityId,
     );
 
   const remote = upsertSimulatedListing(
