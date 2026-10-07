@@ -114,7 +114,7 @@ export function confirmPack(
   );
   if (
     !normalized.valid ||
-    normalized.normalized !== identity[0].barcode_value
+    normalized.value !== identity[0].barcode_value
   ) {
     throw new Error("Scanned barcode does not match the ordered trade unit.");
   }
@@ -153,7 +153,7 @@ export function confirmPack(
         labelRef,
         at,
         at,
-        normalized.normalized,
+        normalized.value,
         scanEvidenceRef,
       );
 
