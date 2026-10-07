@@ -1099,6 +1099,28 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 14,
+    name: "outcome_reconciliation_evidence",
+    sql: `
+      CREATE TABLE outcome_reconciliations (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL
+          REFERENCES orders(id) ON DELETE RESTRICT,
+        outcome_type TEXT NOT NULL CHECK (
+          outcome_type IN ('RTO', 'RETURN', 'LOST', 'DAMAGED')
+        ),
+        outcome_ref TEXT NOT NULL,
+        marketplace_statement_ref TEXT NOT NULL,
+        supplier_invoice_ref TEXT NOT NULL,
+        bank_evidence_ref TEXT NOT NULL,
+        expected_net_cash_paise INTEGER NOT NULL,
+        actual_net_cash_paise INTEGER NOT NULL,
+        reconciled_at TEXT NOT NULL,
+        UNIQUE (outcome_type, outcome_ref)
+      ) STRICT;
+    `,
+  },
 ];
 
 export function applyMigrations(
