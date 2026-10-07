@@ -27,9 +27,14 @@ const database = openDatabase(dbPath, {
 try {
   if (command === "export") {
     const packet = buildResearchPacket(database, now);
+    const expiresAt = new Date(
+      new Date(now).getTime() + 24 * 60 * 60 * 1_000,
+    ).toISOString();
     const inputHash = writeResearchPacketFile(
+      database,
       filePath,
       packet,
+      expiresAt,
     );
     process.stdout.write(
       `${canonicalJson({ filePath, inputHash })}\n`,
