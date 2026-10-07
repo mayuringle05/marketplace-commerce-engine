@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -92,20 +95,15 @@ test("consistent SQLite backup encrypts, restores, and passes integrity check", 
     database.close();
   }
 
-  try {
-    const encrypted = readFileSync(encryptedPath);
-    assert.equal(
-      encrypted.subarray(0, 16).toString("utf8"),
-      "COSMOBKP1".padEnd(16, "\u0000"),
-      "encrypted payload must not expose SQLite header",
-    );
-  } catch {
-    const encrypted = readFileSync(encryptedPath);
-    assert.notEqual(
-      encrypted.subarray(0, 16).toString("utf8"),
-      "SQLite format 3\u0000",
-    );
-  }
+  const encrypted = readFileSync(encryptedPath);
+  assert.notEqual(
+    encrypted.subarray(0, 16).toString("utf8"),
+    "SQLite format 3\u0000",
+  );
+  assert.equal(
+    encrypted.subarray(0, 9).toString("utf8"),
+    "COSMOBKP1",
+  );
 
   decryptBackupFile(encryptedPath, restoredPath, keyHex);
   verifySqliteIntegrity(restoredPath);
@@ -124,6 +122,85 @@ test("consistent SQLite backup encrypts, restores, and passes integrity check", 
     assert.equal(row.value_json, '{"value":1}');
   } finally {
     restored.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("restore verification rejects missing and wrong-schema databases without creating them", () => {
+  const directory = mkdtempSync(
+    join(tmpdir(), "cosmo-restore-invalid-"),
+  );
+  const missingPath = join(directory, "missing.sqlite");
+  const wrongSchemaPath = join(directory, "wrong.sqlite");
+
+  try {
+    assert.throws(
+      () => verifySqliteIntegrity(missingPath),
+      /missing or empty/,
+    );
+    assert.equal(existsSync(missingPath), false);
+
+    const wrong = new DatabaseSync(wrongSchemaPath);
+    try {
+      wrong.exec("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)");
+    } finally {
+      wrong.close();
+    }
+
+    assert.throws(
+      () => verifySqliteIntegrity(wrongSchemaPath),
+      /expected commerce schema/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("encrypted backup rejects wrong keys and tampering", () => {
+  const directory = mkdtempSync(
+    join(tmpdir(), "cosmo-backup-tamper-"),
+  );
+  const sourcePath = join(directory, "source.sqlite");
+  const plainPath = join(directory, "snapshot.sqlite");
+  const encryptedPath = join(directory, "snapshot.sqlite.enc");
+  const tamperedPath = join(directory, "tampered.sqlite.enc");
+  const outputPath = join(directory, "output.sqlite");
+  const keyHex = "22".repeat(32);
+
+  const database = openDatabase(sourcePath, {
+    appliedAt: T0,
+  });
+  try {
+    createConsistentSqliteBackup(database, plainPath);
+  } finally {
+    database.close();
+  }
+
+  try {
+    encryptBackupFile(plainPath, encryptedPath, keyHex);
+
+    assert.throws(
+      () =>
+        decryptBackupFile(
+          encryptedPath,
+          outputPath,
+          "33".repeat(32),
+        ),
+    );
+
+    const tampered = Buffer.from(readFileSync(encryptedPath));
+    tampered[tampered.length - 1] ^= 0xff;
+    writeFileSync(tamperedPath, tampered);
+
+    assert.throws(
+      () =>
+        decryptBackupFile(
+          tamperedPath,
+          outputPath,
+          keyHex,
+        ),
+    );
+  } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
