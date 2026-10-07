@@ -787,6 +787,221 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 10,
+    name: "stable_supply_cash_and_authority",
+    sql: `
+      CREATE TABLE supply_pools (
+        id TEXT PRIMARY KEY,
+        supplier_id TEXT NOT NULL
+          REFERENCES suppliers(id) ON DELETE RESTRICT,
+        supplier_sku TEXT NOT NULL,
+        product_id TEXT NOT NULL
+          REFERENCES products(id) ON DELETE RESTRICT,
+        fulfilment_route_id TEXT NOT NULL
+          REFERENCES fulfilment_routes(id) ON DELETE RESTRICT,
+        allocated_units INTEGER NOT NULL CHECK (allocated_units >= 0),
+        available_units INTEGER NOT NULL CHECK (available_units >= 0),
+        consumed_units INTEGER NOT NULL DEFAULT 0
+          CHECK (consumed_units >= 0),
+        latest_offer_id TEXT
+          REFERENCES source_offers(id) ON DELETE RESTRICT,
+        latest_observed_at TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version > 0),
+        updated_at TEXT NOT NULL,
+        CHECK (available_units <= allocated_units),
+        CHECK (consumed_units <= allocated_units),
+        UNIQUE (supplier_id, supplier_sku)
+      ) STRICT;
+
+      CREATE TABLE source_offer_supply_pools (
+        offer_id TEXT PRIMARY KEY
+          REFERENCES source_offers(id) ON DELETE RESTRICT,
+        pool_id TEXT NOT NULL
+          REFERENCES supply_pools(id) ON DELETE RESTRICT
+      ) STRICT;
+
+      INSERT INTO supply_pools (
+        id,
+        supplier_id,
+        supplier_sku,
+        product_id,
+        fulfilment_route_id,
+        allocated_units,
+        available_units,
+        consumed_units,
+        latest_offer_id,
+        latest_observed_at,
+        version,
+        updated_at
+      )
+      SELECT
+        'legacy:' || s.supplier_id || ':' || s.supplier_sku,
+        s.supplier_id,
+        s.supplier_sku,
+        s.product_id,
+        s.fulfilment_route_id,
+        s.allocated_units,
+        s.available_units,
+        0,
+        s.id,
+        s.observed_at,
+        1,
+        s.observed_at
+      FROM source_offers s
+      WHERE s.fulfilment_route_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM source_offers newer
+          WHERE newer.supplier_id = s.supplier_id
+            AND newer.supplier_sku = s.supplier_sku
+            AND (
+              newer.observed_at > s.observed_at OR
+              (
+                newer.observed_at = s.observed_at AND
+                newer.id > s.id
+              )
+            )
+        );
+
+      INSERT INTO source_offer_supply_pools (offer_id, pool_id)
+      SELECT
+        s.id,
+        p.id
+      FROM source_offers s
+      JOIN supply_pools p
+        ON p.supplier_id = s.supplier_id
+        AND p.supplier_sku = s.supplier_sku;
+
+      ALTER TABLE listings ADD COLUMN supply_pool_id TEXT
+        REFERENCES supply_pools(id) ON DELETE RESTRICT;
+      ALTER TABLE listings ADD COLUMN opportunity_id TEXT
+        REFERENCES opportunities(id) ON DELETE RESTRICT;
+
+      UPDATE listings
+      SET supply_pool_id = (
+        SELECT lnk.pool_id
+        FROM source_offer_supply_pools lnk
+        WHERE lnk.offer_id = listings.source_offer_id
+      );
+
+      DROP INDEX listings_single_source_pool_idx;
+      CREATE UNIQUE INDEX listings_single_supply_pool_idx
+        ON listings(supply_pool_id)
+        WHERE supply_pool_id IS NOT NULL;
+
+      ALTER TABLE reservations ADD COLUMN supply_pool_id TEXT
+        REFERENCES supply_pools(id) ON DELETE RESTRICT;
+
+      UPDATE reservations
+      SET supply_pool_id = (
+        SELECT lnk.pool_id
+        FROM source_offer_supply_pools lnk
+        WHERE lnk.offer_id = reservations.source_offer_id
+      );
+
+      CREATE TABLE stock_commitments (
+        order_item_id TEXT PRIMARY KEY
+          REFERENCES order_items(id) ON DELETE RESTRICT,
+        supply_pool_id TEXT NOT NULL
+          REFERENCES supply_pools(id) ON DELETE RESTRICT,
+        units INTEGER NOT NULL CHECK (units > 0),
+        state TEXT NOT NULL CHECK (
+          state IN ('ACCEPTED', 'RESERVED', 'CONSUMED', 'RELEASED')
+        ),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX stock_commitments_pool_idx
+        ON stock_commitments(supply_pool_id, state);
+
+      ALTER TABLE order_items ADD COLUMN marketplace_item_id TEXT;
+      CREATE UNIQUE INDEX order_items_marketplace_item_idx
+        ON order_items(order_id, marketplace_item_id)
+        WHERE marketplace_item_id IS NOT NULL;
+
+      ALTER TABLE opportunities ADD COLUMN approved_price_paise INTEGER
+        CHECK (
+          approved_price_paise IS NULL OR
+          approved_price_paise >= 0
+        );
+      ALTER TABLE opportunities ADD COLUMN required_cash_paise_per_unit INTEGER
+        CHECK (
+          required_cash_paise_per_unit IS NULL OR
+          required_cash_paise_per_unit >= 0
+        );
+      ALTER TABLE opportunities ADD COLUMN source_observed_at TEXT;
+      ALTER TABLE opportunities ADD COLUMN source_valid_until TEXT;
+
+      CREATE TABLE cash_snapshots (
+        id TEXT PRIMARY KEY,
+        available_cash_paise INTEGER NOT NULL
+          CHECK (available_cash_paise >= 0),
+        evidence_ref TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        valid_until TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        CHECK (valid_until > observed_at)
+      ) STRICT;
+
+      CREATE TABLE cash_policy (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        refund_reserve_paise INTEGER NOT NULL
+          CHECK (refund_reserve_paise >= 0),
+        settlement_delay_reserve_paise INTEGER NOT NULL
+          CHECK (settlement_delay_reserve_paise >= 0),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO cash_policy (
+        singleton,
+        refund_reserve_paise,
+        settlement_delay_reserve_paise,
+        updated_at
+      ) VALUES (1, 0, 0, '1970-01-01T00:00:00.000Z');
+
+      CREATE TABLE purchase_authorizations (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL UNIQUE
+          REFERENCES orders(id) ON DELETE RESTRICT,
+        reservation_id TEXT NOT NULL
+          REFERENCES reservations(id) ON DELETE RESTRICT,
+        order_item_id TEXT NOT NULL
+          REFERENCES order_items(id) ON DELETE RESTRICT,
+        supplier_id TEXT NOT NULL
+          REFERENCES suppliers(id) ON DELETE RESTRICT,
+        supplier_sku TEXT NOT NULL,
+        supply_pool_id TEXT NOT NULL
+          REFERENCES supply_pools(id) ON DELETE RESTRICT,
+        source_offer_id TEXT NOT NULL
+          REFERENCES source_offers(id) ON DELETE RESTRICT,
+        fulfilment_route_id TEXT NOT NULL
+          REFERENCES fulfilment_routes(id) ON DELETE RESTRICT,
+        trade_unit_id TEXT NOT NULL
+          REFERENCES packaged_trade_units(id) ON DELETE RESTRICT,
+        mapping_version INTEGER NOT NULL CHECK (mapping_version > 0),
+        destination_key TEXT NOT NULL,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        maximum_amount_paise INTEGER NOT NULL
+          CHECK (maximum_amount_paise >= 0),
+        payload_hash TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        consumed_at TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE supply_replenishment_events (
+        id TEXT PRIMARY KEY,
+        supply_pool_id TEXT NOT NULL
+          REFERENCES supply_pools(id) ON DELETE RESTRICT,
+        units INTEGER NOT NULL CHECK (units > 0),
+        evidence_ref TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        UNIQUE (supply_pool_id, evidence_ref)
+      ) STRICT;
+    `,
+  },
 ];
 
 export function applyMigrations(
