@@ -1022,6 +1022,83 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE shipments ADD COLUMN scan_evidence_ref TEXT;
     `,
   },
+  {
+    version: 13,
+    name: "financial_event_identity_and_reconciliation",
+    sql: `
+      CREATE TABLE financial_events_v2 (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        account_scope TEXT NOT NULL,
+        external_event_id TEXT NOT NULL,
+        external_line_id TEXT NOT NULL,
+        order_id TEXT
+          REFERENCES orders(id) ON DELETE RESTRICT,
+        entry_type TEXT NOT NULL CHECK (
+          entry_type IN (
+            'CUSTOMER_REVENUE',
+            'MARKETPLACE_FEE',
+            'LOGISTICS',
+            'SUPPLIER_PAYABLE',
+            'PACKING',
+            'TAX_OUTPUT',
+            'TAX_INPUT_CREDIT',
+            'WITHHOLDING_ASSET',
+            'REFUND',
+            'RETURN_RECOVERY',
+            'SETTLEMENT',
+            'ADJUSTMENT'
+          )
+        ),
+        amount_paise INTEGER NOT NULL,
+        economic_effect INTEGER NOT NULL
+          CHECK (economic_effect IN (0, 1)),
+        cash_effect INTEGER NOT NULL
+          CHECK (cash_effect IN (0, 1)),
+        provisional INTEGER NOT NULL
+          CHECK (provisional IN (0, 1)),
+        source_ref TEXT NOT NULL,
+        event_at TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (
+          provider,
+          account_scope,
+          external_event_id,
+          external_line_id
+        )
+      ) STRICT;
+
+      CREATE INDEX financial_events_v2_order_idx
+        ON financial_events_v2(order_id, event_at);
+
+      CREATE TRIGGER financial_events_v2_no_update
+      BEFORE UPDATE ON financial_events_v2
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable financial event');
+      END;
+
+      CREATE TRIGGER financial_events_v2_no_delete
+      BEFORE DELETE ON financial_events_v2
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable financial event');
+      END;
+
+      CREATE TABLE financial_reconciliations (
+        order_id TEXT PRIMARY KEY
+          REFERENCES orders(id) ON DELETE RESTRICT,
+        marketplace_statement_ref TEXT NOT NULL,
+        supplier_invoice_ref TEXT NOT NULL,
+        bank_evidence_ref TEXT NOT NULL,
+        expected_settlement_paise INTEGER NOT NULL
+          CHECK (expected_settlement_paise >= 0),
+        actual_settlement_paise INTEGER NOT NULL
+          CHECK (actual_settlement_paise >= 0),
+        maturity_eligible_at TEXT NOT NULL,
+        reconciled_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
 ];
 
 export function applyMigrations(
