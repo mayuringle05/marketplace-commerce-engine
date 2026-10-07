@@ -1190,6 +1190,56 @@ export const MIGRATIONS: readonly Migration[] = [
         );
     `,
   },
+  {
+    version: 18,
+    name: "immutable_purchase_authority",
+    sql: `
+      CREATE TRIGGER purchase_authorizations_immutable_fields
+      BEFORE UPDATE OF
+        order_id,
+        reservation_id,
+        order_item_id,
+        supplier_id,
+        supplier_sku,
+        supply_pool_id,
+        source_offer_id,
+        fulfilment_route_id,
+        trade_unit_id,
+        mapping_version,
+        destination_key,
+        quantity,
+        maximum_amount_paise,
+        payload_hash,
+        expires_at,
+        created_at
+      ON purchase_authorizations
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable purchase authorization');
+      END;
+
+      CREATE TRIGGER purchase_authorizations_no_delete
+      BEFORE DELETE ON purchase_authorizations
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable purchase authorization');
+      END;
+
+      CREATE TRIGGER purchase_orders_immutable_authority
+      BEFORE UPDATE OF
+        order_id,
+        supplier_id,
+        client_po_ref,
+        authorized_amount_paise,
+        quantity,
+        payload_hash,
+        idempotency_key,
+        authorization_expires_at,
+        authorization_id
+      ON purchase_orders
+      BEGIN
+        SELECT RAISE(ABORT, 'immutable purchase order authority');
+      END;
+    `,
+  },
 ];
 
 export function applyMigrations(
