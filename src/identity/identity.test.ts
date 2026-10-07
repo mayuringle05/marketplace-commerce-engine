@@ -143,7 +143,7 @@ test("classifies exact brand plus model fallback as B", () => {
   assert.deepEqual(result.reasons, ["EXACT_BRAND_AND_MODEL"]);
 });
 
-test("classifies brand-only evidence as C and does not auto-approve it", () => {
+test("hard-vetoes contradictory models instead of treating brand support as C", () => {
   const result = classifyIdentity(
     {
       brand: "Acme",
@@ -155,8 +155,8 @@ test("classifies brand-only evidence as C and does not auto-approve it", () => {
     },
   );
 
-  assert.equal(result.classification, "C");
-  assert.deepEqual(result.reasons, ["BRAND_SUPPORT_ONLY"]);
+  assert.equal(result.classification, "CONFLICT");
+  assert.deepEqual(result.reasons, ["MODEL_CONTRADICTION"]);
 });
 
 test("classifies no strong evidence as D", () => {
