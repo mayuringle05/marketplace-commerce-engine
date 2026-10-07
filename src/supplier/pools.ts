@@ -78,15 +78,28 @@ export function readSupplyPoolCapacity(
     )
     .get(poolId) as { units: bigint };
 
+  const held = database
+    .prepare(
+      `
+        SELECT COALESCE(SUM(quantity), 0) AS units
+        FROM marketplace_order_obligations
+        WHERE supply_pool_id = ?
+          AND state = 'HELD_MULTI_ITEM'
+      `,
+    )
+    .get(poolId) as { units: bigint };
+
+  const conservedCommitments =
+    commitments.units + held.units;
   const byAllocation =
     pool.allocated_units -
     pool.consumed_units -
-    commitments.units -
+    conservedCommitments -
     safetyUnits;
   const byAvailability =
     pool.available_units -
     pool.consumed_units -
-    commitments.units -
+    conservedCommitments -
     safetyUnits;
   const capacity =
     byAllocation < byAvailability ? byAllocation : byAvailability;
@@ -96,7 +109,7 @@ export function readSupplyPoolCapacity(
     allocatedUnits: pool.allocated_units,
     availableUnits: pool.available_units,
     consumedUnits: pool.consumed_units,
-    committedUnits: commitments.units,
+    committedUnits: conservedCommitments,
     safetyUnits,
     publicCapacityUnits: capacity > 0n ? capacity : 0n,
   };
