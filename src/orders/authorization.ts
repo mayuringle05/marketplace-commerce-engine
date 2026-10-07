@@ -1,6 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { createReservation } from "./reservations.ts";
+import {
+  createReservation,
+  releaseReservation,
+} from "./reservations.ts";
 import {
   transitionOrder,
   type OrderState,
@@ -43,75 +46,89 @@ export function validateAndAuthorizeOrder(
   database: DatabaseSync,
   input: OrderAuthorizationInput,
 ): void {
-  let order = readOrder(database, input.orderId);
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const order = readOrder(database, input.orderId);
 
-  if (order.state !== "RECEIVED") {
-    throw new Error("Authorization requires RECEIVED order.");
-  }
+    if (order.state !== "RECEIVED") {
+      throw new Error("Authorization requires RECEIVED order.");
+    }
 
-  let version = transitionOrder(
-    database,
-    input.orderId,
-    "RECEIVED",
-    Number(order.version),
-    "HELD",
-    input.authorizedAt,
-  );
+    let version = transitionOrder(
+      database,
+      input.orderId,
+      "RECEIVED",
+      Number(order.version),
+      "HELD",
+      input.authorizedAt,
+    );
 
-  createReservation(database, {
-    orderId: input.orderId,
-    sourceOfferId: input.sourceOfferId,
-    units: input.units,
-    cashPaise: input.cashPaise,
-    availableCashPaise: input.availableCashPaise,
-    createdAt: input.authorizedAt,
-  });
+    createReservation(database, {
+      orderId: input.orderId,
+      sourceOfferId: input.sourceOfferId,
+      units: input.units,
+      cashPaise: input.cashPaise,
+      availableCashPaise: input.availableCashPaise,
+      createdAt: input.authorizedAt,
+    });
 
-  version = transitionOrder(
-    database,
-    input.orderId,
-    "HELD",
-    version,
-    "RESERVED",
-    input.authorizedAt,
-  );
+    version = transitionOrder(
+      database,
+      input.orderId,
+      "HELD",
+      version,
+      "RESERVED",
+      input.authorizedAt,
+    );
 
-  version = transitionOrder(
-    database,
-    input.orderId,
-    "RESERVED",
-    version,
-    "VALIDATING",
-    input.authorizedAt,
-  );
+    version = transitionOrder(
+      database,
+      input.orderId,
+      "RESERVED",
+      version,
+      "VALIDATING",
+      input.authorizedAt,
+    );
 
-  let failure: OrderState | null = null;
-  if (!input.identityOk) {
-    failure = "IDENTITY_CONFLICT";
-  } else if (!input.sourceFresh || !input.economicsOk) {
-    failure = "PRICE_BREACH";
-  } else if (!input.routeOk) {
-    failure = "SLA_BREACH";
-  }
+    let failure: OrderState | null = null;
+    if (!input.identityOk) {
+      failure = "IDENTITY_CONFLICT";
+    } else if (!input.sourceFresh || !input.economicsOk) {
+      failure = "PRICE_BREACH";
+    } else if (!input.routeOk) {
+      failure = "SLA_BREACH";
+    }
 
-  if (failure !== null) {
+    if (failure !== null) {
+      transitionOrder(
+        database,
+        input.orderId,
+        "VALIDATING",
+        version,
+        failure,
+        input.authorizedAt,
+      );
+      releaseReservation(
+        database,
+        input.orderId,
+        input.authorizedAt,
+      );
+      database.exec("COMMIT");
+      return;
+    }
+
     transitionOrder(
       database,
       input.orderId,
       "VALIDATING",
       version,
-      failure,
+      "AUTHORIZED",
       input.authorizedAt,
     );
-    return;
-  }
 
-  transitionOrder(
-    database,
-    input.orderId,
-    "VALIDATING",
-    version,
-    "AUTHORIZED",
-    input.authorizedAt,
-  );
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
