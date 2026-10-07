@@ -1014,6 +1014,14 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE returns ADD COLUMN recovery_evidence_ref TEXT;
     `,
   },
+  {
+    version: 12,
+    name: "shipment_scan_evidence",
+    sql: `
+      ALTER TABLE shipments ADD COLUMN scanned_barcode TEXT;
+      ALTER TABLE shipments ADD COLUMN scan_evidence_ref TEXT;
+    `,
+  },
 ];
 
 export function applyMigrations(
