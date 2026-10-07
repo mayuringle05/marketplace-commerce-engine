@@ -446,6 +446,7 @@ export function runLocalEndToEndDemo(
     overheadPaise: 1_200,
     settlementCashPaise: 64_750,
     sourceRef: "SIM-STATEMENT-001",
+    maturityEligibleAt: "2026-10-20T00:00:00.000Z",
     settledAt: "2026-10-20T00:00:00.000Z",
   });
 
