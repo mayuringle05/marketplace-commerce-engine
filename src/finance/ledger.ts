@@ -1,6 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { deterministicId } from "../core/deterministic.ts";
+import {
+  assertCanonicalUtcTimestamp,
+  deterministicId,
+} from "../core/deterministic.ts";
 import { transitionOrder } from "../orders/state-machine.ts";
 import { consumeReservation } from "../orders/reservations.ts";
 
@@ -106,6 +109,7 @@ export interface KeptSettlementInput {
   readonly overheadPaise: number;
   readonly settlementCashPaise: number;
   readonly sourceRef: string;
+  readonly maturityEligibleAt: string;
   readonly settledAt: string;
 }
 
@@ -113,6 +117,21 @@ export function reconcileDeliveredKeptOrder(
   database: DatabaseSync,
   input: KeptSettlementInput,
 ): bigint {
+  const settledMs = assertCanonicalUtcTimestamp(
+    input.settledAt,
+    "settledAt",
+  );
+  const maturityEligibleMs = assertCanonicalUtcTimestamp(
+    input.maturityEligibleAt,
+    "maturityEligibleAt",
+  );
+
+  if (settledMs < maturityEligibleMs) {
+    throw new Error(
+      "Delivered order cannot mature before the return/maturity boundary.",
+    );
+  }
+
   const order = database
     .prepare("SELECT state, version FROM orders WHERE id = ?")
     .get(input.orderId) as
