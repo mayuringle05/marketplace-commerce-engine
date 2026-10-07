@@ -104,10 +104,16 @@ test("classifies exact brand plus MPN fallback as B", () => {
     {
       brand: "Acme",
       mpn: "ABC-123",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
     },
     {
       brand: " acme ",
       mpn: "abc-123",
+      condition: "NEW",
+      marketRegion: "in",
+      packCount: 1,
     },
   );
 
@@ -120,10 +126,16 @@ test("classifies exact brand plus model fallback as B", () => {
     {
       brand: "Acme",
       model: "Desk Fan 20",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
     },
     {
       brand: "ACME",
       model: "desk fan 20",
+      condition: "NEW",
+      marketRegion: "in",
+      packCount: 1,
     },
   );
 
@@ -281,4 +293,53 @@ test("only A and B identity classes are automation-eligible", () => {
   assert.equal(isAutomationEligibleIdentityClass("C"), false);
   assert.equal(isAutomationEligibleIdentityClass("D"), false);
   assert.equal(isAutomationEligibleIdentityClass("CONFLICT"), false);
+});
+
+test("hard-vetoes conflicting MPN even when brand and model match", () => {
+  const result = classifyIdentity(
+    {
+      brand: "Acme",
+      model: "Desk Fan 20",
+      mpn: "MPN-A",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
+    },
+    {
+      brand: "Acme",
+      model: "Desk Fan 20",
+      mpn: "MPN-B",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
+    },
+  );
+
+  assert.equal(result.classification, "CONFLICT");
+  assert.ok(result.reasons.includes("MPN_CONTRADICTION"));
+});
+
+test("brand plus MPN remains WATCH-like C when operational attributes are missing", () => {
+  const result = classifyIdentity(
+    {
+      brand: "Acme",
+      mpn: "ABC-123",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
+    },
+    {
+      brand: "Acme",
+      mpn: "ABC-123",
+    },
+  );
+
+  assert.equal(result.classification, "C");
+  assert.deepEqual(result.reasons, [
+    "MISSING_REQUIRED_ATTRIBUTES",
+  ]);
+  assert.equal(
+    isAutomationEligibleIdentityClass(result.classification),
+    false,
+  );
 });
