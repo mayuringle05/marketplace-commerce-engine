@@ -298,3 +298,35 @@ export function pauseListingAndConfirm(
       sellerSku,
     );
 }
+
+export function pauseAllListingsAndConfirm(
+  database: DatabaseSync,
+  updatedAt: string,
+): number {
+  const listings = database
+    .prepare(
+      `
+        SELECT marketplace, seller_sku
+        FROM listings
+        WHERE desired_state != 'PAUSED'
+           OR observed_state != 'PAUSED'
+           OR COALESCE(observed_quantity, 0) != 0
+        ORDER BY marketplace, seller_sku
+      `,
+    )
+    .all() as Array<{
+    marketplace: string;
+    seller_sku: string;
+  }>;
+
+  for (const listing of listings) {
+    pauseListingAndConfirm(
+      database,
+      listing.marketplace,
+      listing.seller_sku,
+      updatedAt,
+    );
+  }
+
+  return listings.length;
+}
