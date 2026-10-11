@@ -71,7 +71,7 @@ test("applies every known migration exactly once", () => {
       .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
       .get() as { count: bigint };
 
-    assert.equal(row.count, 18n);
+    assert.equal(row.count, 19n);
   } finally {
     database.close();
   }
