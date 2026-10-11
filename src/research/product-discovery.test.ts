@@ -119,3 +119,57 @@ test("discovery input requires exact schema and HTTPS evidence", () => {
     /must use HTTPS/,
   );
 });
+
+test("unknown supplier cost or missing supplier evidence is rejected", () => {
+  const unknownCost = JSON.parse(candidate()) as {
+    candidates: Array<Record<string, unknown>>;
+  };
+  const firstUnknown = unknownCost.candidates[0];
+  assert.ok(firstUnknown);
+  firstUnknown.estimatedSupplierCostPaise = 0;
+
+  const parsedUnknown = parseProductDiscoveryBatchJson(
+    JSON.stringify(unknownCost),
+  );
+  const unknownCandidate = parsedUnknown.candidates[0];
+  assert.ok(unknownCandidate);
+  const unknownDecision =
+    evaluateDiscoveryCandidate(unknownCandidate);
+
+  assert.equal(unknownDecision.recommendation, "REJECT");
+  assert.ok(
+    unknownDecision.blockingReasons.includes(
+      "SUPPLIER_COST_UNVERIFIED",
+    ),
+  );
+
+  const noSupplier = JSON.parse(candidate()) as {
+    candidates: Array<Record<string, unknown>>;
+  };
+  const firstNoSupplier = noSupplier.candidates[0];
+  assert.ok(firstNoSupplier);
+  firstNoSupplier.sources = (
+    firstNoSupplier.sources as Array<Record<string, unknown>>
+  ).filter((source) => source.kind !== "SUPPLIER");
+  (
+    firstNoSupplier.sources as Array<Record<string, unknown>>
+  ).push({
+    kind: "EDITORIAL",
+    url: "https://example.com/editorial",
+  });
+
+  const parsedNoSupplier = parseProductDiscoveryBatchJson(
+    JSON.stringify(noSupplier),
+  );
+  const noSupplierCandidate = parsedNoSupplier.candidates[0];
+  assert.ok(noSupplierCandidate);
+  const noSupplierDecision =
+    evaluateDiscoveryCandidate(noSupplierCandidate);
+
+  assert.equal(noSupplierDecision.recommendation, "REJECT");
+  assert.ok(
+    noSupplierDecision.blockingReasons.includes(
+      "SUPPLIER_EVIDENCE_MISSING",
+    ),
+  );
+});
