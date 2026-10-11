@@ -25,6 +25,7 @@ export interface OpportunityInput {
   readonly economics: CandidateEconomicsResult;
   readonly demand: DemandEvidence;
   readonly evidenceVersion: string;
+  readonly researchProductKey?: string | null;
   readonly createdAt: string;
 }
 
@@ -159,8 +160,9 @@ export function persistOpportunity(
           required_cash_paise_per_unit,
           source_observed_at,
           source_valid_until,
-          source_fresh_until
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          source_fresh_until,
+          research_product_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(
           trade_unit_id,
           source_offer_id,
@@ -177,7 +179,8 @@ export function persistOpportunity(
           required_cash_paise_per_unit = excluded.required_cash_paise_per_unit,
           source_observed_at = excluded.source_observed_at,
           source_valid_until = excluded.source_valid_until,
-          source_fresh_until = excluded.source_fresh_until
+          source_fresh_until = excluded.source_fresh_until,
+          research_product_key = excluded.research_product_key
       `,
     )
     .run(
@@ -199,6 +202,7 @@ export function persistOpportunity(
       input.freshness.offer.observedAt,
       input.freshness.offer.validUntil,
       input.sourceFreshUntil,
+      input.researchProductKey ?? null,
     );
 
   return id;
