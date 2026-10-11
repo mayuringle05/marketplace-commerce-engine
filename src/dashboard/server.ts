@@ -534,7 +534,7 @@ const html = `<!doctype html>
       color: #dce2ed;
       font-size: 10px;
       font-weight: 650;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
 
     .metric-big {
