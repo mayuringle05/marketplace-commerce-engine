@@ -454,7 +454,9 @@ export function evaluateDiscoveryCandidate(
   ) {
     blockingReasons.push("TREND_CONFIDENCE_TOO_LOW");
   }
-  if (
+  if (candidate.estimatedSupplierCostPaise <= 0) {
+    blockingReasons.push("SUPPLIER_COST_UNVERIFIED");
+  } else if (
     estimatedGrossSpreadBps <
     policy.minimumEstimatedGrossSpreadBps
   ) {
@@ -480,6 +482,9 @@ export function evaluateDiscoveryCandidate(
       : "FLIPKART";
   if (!distinctKinds.has(requiredMarketplaceKind)) {
     blockingReasons.push("MARKETPLACE_EVIDENCE_MISSING");
+  }
+  if (!distinctKinds.has("SUPPLIER")) {
+    blockingReasons.push("SUPPLIER_EVIDENCE_MISSING");
   }
   if (
     !candidate.sources.some((source) =>
