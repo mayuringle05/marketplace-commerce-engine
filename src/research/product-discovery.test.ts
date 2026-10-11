@@ -173,3 +173,49 @@ test("unknown supplier cost or missing supplier evidence is rejected", () => {
     ),
   );
 });
+
+test("source-less discovery candidate fails closed without aborting the batch", () => {
+  const raw = JSON.parse(candidate()) as {
+    candidates: Array<Record<string, unknown>>;
+  };
+  const first = raw.candidates[0];
+  assert.ok(first);
+  first.sources = [];
+
+  const parsed = parseProductDiscoveryBatchJson(
+    JSON.stringify(raw),
+  );
+  const parsedCandidate = parsed.candidates[0];
+  assert.ok(parsedCandidate);
+
+  const decision = evaluateDiscoveryCandidate(parsedCandidate);
+
+  assert.equal(decision.recommendation, "REJECT");
+  assert.ok(
+    decision.blockingReasons.includes(
+      "INSUFFICIENT_SOURCE_COUNT",
+    ),
+  );
+  assert.ok(
+    decision.blockingReasons.includes(
+      "INSUFFICIENT_SOURCE_DIVERSITY",
+    ),
+  );
+  assert.ok(
+    decision.blockingReasons.includes(
+      "MARKETPLACE_EVIDENCE_MISSING",
+    ),
+  );
+  assert.ok(
+    decision.blockingReasons.includes(
+      "SUPPLIER_EVIDENCE_MISSING",
+    ),
+  );
+  assert.ok(
+    decision.blockingReasons.includes(
+      "NON_COMMUNITY_EVIDENCE_MISSING",
+    ),
+  );
+  assert.equal(decision.listingEligible, false);
+  assert.equal(decision.transactionAuthority, false);
+});
