@@ -12,7 +12,7 @@ export interface MarketplaceEconomicsProfile {
   readonly profileId: string;
   readonly marketplace: EconomicsMarketplace;
   readonly categoryScope: string;
-  readonly verificationStatus: "VERIFIED";
+  readonly verificationStatus: "PUBLIC_STANDARD" | "VERIFIED";
   readonly effectiveFrom: string;
   readonly effectiveUntil: string;
   readonly verifiedAt: string;
@@ -163,9 +163,12 @@ export function parseMarketplaceEconomicsProfileJson(
   ) {
     throw new Error("Economics profile marketplace is unsupported.");
   }
-  if (value.verificationStatus !== "VERIFIED") {
+  if (
+    value.verificationStatus !== "PUBLIC_STANDARD" &&
+    value.verificationStatus !== "VERIFIED"
+  ) {
     throw new Error(
-      "Economics profile must be explicitly marked VERIFIED.",
+      "Economics profile verificationStatus must be PUBLIC_STANDARD or VERIFIED.",
     );
   }
   if (typeof value.supplierTaxRecoverable !== "boolean") {
@@ -218,7 +221,7 @@ export function parseMarketplaceEconomicsProfileJson(
     profileId: text(value.profileId, "profileId", 160),
     marketplace: value.marketplace,
     categoryScope: text(value.categoryScope, "categoryScope", 160),
-    verificationStatus: "VERIFIED",
+    verificationStatus: value.verificationStatus,
     effectiveFrom,
     effectiveUntil,
     verifiedAt,
@@ -336,8 +339,9 @@ export function upsertMarketplaceEconomicsProfile(
           source_version,
           source_refs_json,
           profile_json,
+          verification_status,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(profile_id) DO UPDATE SET
           marketplace = excluded.marketplace,
           category_scope = excluded.category_scope,
@@ -347,6 +351,7 @@ export function upsertMarketplaceEconomicsProfile(
           source_version = excluded.source_version,
           source_refs_json = excluded.source_refs_json,
           profile_json = excluded.profile_json,
+          verification_status = excluded.verification_status,
           created_at = excluded.created_at
       `,
     )
@@ -360,6 +365,7 @@ export function upsertMarketplaceEconomicsProfile(
       profile.sourceVersion,
       canonicalJson(profile.sourceRefs),
       canonicalJson(profile),
+      profile.verificationStatus,
       createdAt,
     );
 }
@@ -382,6 +388,7 @@ export function findActiveEconomicsProfile(
           AND effective_until > ?
         ORDER BY
           CASE WHEN category_scope = ? THEN 0 ELSE 1 END,
+          CASE WHEN verification_status = 'VERIFIED' THEN 0 ELSE 1 END,
           verified_at DESC,
           created_at DESC
         LIMIT 1

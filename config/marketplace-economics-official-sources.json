@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-11T15:45:00.000Z",
+  "sources": {
+    "AMAZON_IN": {
+      "url": "https://sell.amazon.in/fees-and-pricing",
+      "evidenceLevel": "PUBLIC_STANDARD",
+      "notes": [
+        "Referral fees vary by product category.",
+        "Closing fees vary by selling-price range and fulfilment channel.",
+        "Weight-handling fees vary by chargeable weight and shipping distance.",
+        "Amazon states that displayed selling fees exclude GST and 18% GST is applied to those fees.",
+        "Seller-specific/current calculator output is still required before economics may be marked VERIFIED."
+      ]
+    },
+    "FLIPKART_IN": {
+      "url": "https://seller.flipkart.com/fees-and-commission",
+      "evidenceLevel": "PUBLIC_STANDARD",
+      "notes": [
+        "Fixed fees vary by selling-price range and FBF/NFBF fulfilment.",
+        "Commission varies by category.",
+        "Collection fees vary by selling price and payment mode.",
+        "Shipping fees vary by chargeable weight and local/zonal/national movement.",
+        "Flipkart recommends using the seller account for accurate current rates; seller-specific/current inputs are required before economics may be marked VERIFIED."
+      ]
+    }
+  }
+}

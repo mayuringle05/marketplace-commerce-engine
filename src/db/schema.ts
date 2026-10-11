@@ -1498,6 +1498,26 @@ export const MIGRATIONS: readonly Migration[] = [
         ON research_advice(product_key, created_at DESC);
     `,
   },
+  {
+    version: 23,
+    name: "economics_verification_level",
+    sql: `
+      ALTER TABLE marketplace_economics_profiles
+        ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'VERIFIED'
+        CHECK (
+          verification_status IN ('PUBLIC_STANDARD', 'VERIFIED')
+        );
+
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_verification_status TEXT CHECK (
+          economics_verification_status IS NULL OR
+          economics_verification_status IN (
+            'PUBLIC_STANDARD',
+            'VERIFIED'
+          )
+        );
+    `,
+  },
 ];
 
 export function applyMigrations(

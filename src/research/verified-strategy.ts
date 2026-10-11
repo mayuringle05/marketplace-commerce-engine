@@ -33,6 +33,10 @@ export type StockDecision =
 export interface VerifiedCommerceStrategy {
   readonly demandClass: DemandClass;
   readonly economicsProfileId: string | null;
+  readonly economicsVerificationStatus:
+    | "PUBLIC_STANDARD"
+    | "VERIFIED"
+    | null;
   readonly economicsStatus: "PASS" | "WATCH" | "REJECT" | null;
   readonly verifiedPricePaise: number | null;
   readonly expectedNetProfitPaise: number | null;
@@ -290,6 +294,8 @@ export function buildVerifiedCommerceStrategy(
     return {
       demandClass,
       economicsProfileId: profile?.profileId ?? null,
+      economicsVerificationStatus:
+        profile?.verificationStatus ?? null,
       economicsStatus: null,
       verifiedPricePaise: null,
       expectedNetProfitPaise: null,
@@ -313,6 +319,8 @@ export function buildVerifiedCommerceStrategy(
     return {
       demandClass,
       economicsProfileId: profile?.profileId ?? null,
+      economicsVerificationStatus:
+        profile?.verificationStatus ?? null,
       economicsStatus: null,
       verifiedPricePaise: null,
       expectedNetProfitPaise: null,
@@ -343,6 +351,8 @@ export function buildVerifiedCommerceStrategy(
     return {
       demandClass,
       economicsProfileId: profile.profileId,
+      economicsVerificationStatus:
+        profile.verificationStatus,
       economicsStatus: null,
       verifiedPricePaise: null,
       expectedNetProfitPaise: null,
@@ -360,6 +370,37 @@ export function buildVerifiedCommerceStrategy(
   }
 
   const { economics, pricePaise } = optimized;
+
+  if (profile.verificationStatus === "PUBLIC_STANDARD") {
+    return {
+      demandClass,
+      economicsProfileId: profile.profileId,
+      economicsVerificationStatus: "PUBLIC_STANDARD",
+      economicsStatus: economics.status,
+      verifiedPricePaise: null,
+      expectedNetProfitPaise:
+        economics.base.decisionProfitPaise,
+      decisionMarginBps: economics.base.decisionMarginBps,
+      cashRoiBps: economics.base.cashRoiBps,
+      stressNetProfitPaise:
+        economics.stress.decisionProfitPaise,
+      economicsReasons: [
+        "PUBLIC_STANDARD_ECONOMICS_NOT_SELLER_VERIFIED",
+        ...economics.reasons,
+      ],
+      stockDecision:
+        economics.status === "REJECT" ||
+        economics.stress.decisionProfitPaise < 0
+          ? "DO_NOT_STOCK"
+          : "WATCH",
+      recommendedStockUnits: 0,
+      stockCapitalPaise: 0,
+      projectedBatchProfitPaise: null,
+      reorderPointUnits: 0,
+      netProfitVerified: false,
+    };
+  }
+
   const canPilot =
     evaluation.recommendation === "INVESTIGATE" &&
     economics.status === "PASS" &&
@@ -407,6 +448,7 @@ export function buildVerifiedCommerceStrategy(
   return {
     demandClass,
     economicsProfileId: profile.profileId,
+    economicsVerificationStatus: "VERIFIED",
     economicsStatus: economics.status,
     verifiedPricePaise: pricePaise,
     expectedNetProfitPaise:

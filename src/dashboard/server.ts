@@ -1021,7 +1021,14 @@ const html = `<!doctype html>
         '<div class="detail-card">' +
           '<div class="detail-title">Unit economics</div>' +
           '<div class="metric-big">' + escapeHtml(money(targetPrice)) + '</div>' +
-          '<div class="metric-caption">' + (e && e.netProfitVerified ? 'Verified target price' : 'Research-stage target price') + '</div>' +
+          '<div class="metric-caption">' +
+            (e && e.netProfitVerified
+              ? 'Seller-verified net economics'
+              : e && e.economicsVerificationStatus === 'PUBLIC_STANDARD'
+                ? 'Indicative public-rate economics'
+                : 'Research-stage target price') +
+          '</div>' +
+          detailLine("Economics evidence", e ? pretty(e.economicsVerificationStatus ?? "missing") : "—") +
           detailLine("Market reference", e ? money(e.marketReferencePricePaise) : "—") +
           detailLine("Supplier cost", e ? money(e.supplierCostPaise) : "—") +
           detailLine("Expected net profit", e ? money(e.expectedNetProfitPaise) : "—") +
@@ -1087,7 +1094,13 @@ const html = `<!doctype html>
               escapeHtml(e ? money(e.marketReferencePricePaise) : "—") + '</div></div>' +
             '<div><div class="cell-label">Target price</div><div class="cell-value">' +
               escapeHtml(money(targetPrice)) + '</div><div class="cell-muted">' +
-              escapeHtml(e && e.netProfitVerified ? "net verified" : "research") + '</div></div>' +
+              escapeHtml(
+                e && e.netProfitVerified
+                  ? "net verified"
+                  : e && e.economicsVerificationStatus === "PUBLIC_STANDARD"
+                    ? "indicative"
+                    : "research"
+              ) + '</div></div>' +
             '<div><div class="cell-label">Stock plan</div><span class="badge ' +
               escapeHtml(stockDecision) + '">' + escapeHtml(pretty(stockDecision)) + '</span></div>' +
             '<div class="chevron">⌄</div>' +

@@ -82,7 +82,18 @@ test("verified economics profile is strict and selectable", () => {
   }
 });
 
-test("economics profile refuses unverified assumptions", () => {
+test("economics profile accepts public standard but rejects unknown verification states", () => {
+  const publicStandard = parseMarketplaceEconomicsProfileJson(
+    profile({
+      profileId: "amazon-public-2026-10",
+      verificationStatus: "PUBLIC_STANDARD",
+    }),
+  );
+  assert.equal(
+    publicStandard.verificationStatus,
+    "PUBLIC_STANDARD",
+  );
+
   assert.throws(
     () =>
       parseMarketplaceEconomicsProfileJson(
@@ -90,7 +101,7 @@ test("economics profile refuses unverified assumptions", () => {
           verificationStatus: "DRAFT",
         }),
       ),
-    /explicitly marked VERIFIED/,
+    /PUBLIC_STANDARD or VERIFIED/,
   );
 });
 
@@ -124,6 +135,57 @@ test("category-specific economics profile wins over wildcard", () => {
       AT,
     );
     assert.equal(selected?.profileId, "amazon-desk-2026-10");
+  } finally {
+    database.close();
+  }
+});
+
+
+test("seller-verified profile wins over public standard for same category", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: AT,
+  });
+
+  try {
+    upsertMarketplaceEconomicsProfile(
+      database,
+      parseMarketplaceEconomicsProfileJson(
+        profile({
+          profileId: "amazon-public-desk-2026-10",
+          categoryScope: "desk organization",
+          verificationStatus: "PUBLIC_STANDARD",
+          verifiedAt: "2026-10-11T09:00:00.000Z",
+        }),
+      ),
+      AT,
+    );
+    upsertMarketplaceEconomicsProfile(
+      database,
+      parseMarketplaceEconomicsProfileJson(
+        profile({
+          profileId: "amazon-verified-desk-2026-10",
+          categoryScope: "desk organization",
+          verificationStatus: "VERIFIED",
+          verifiedAt: "2026-10-10T09:00:00.000Z",
+        }),
+      ),
+      AT,
+    );
+
+    const selected = findActiveEconomicsProfile(
+      database,
+      "AMAZON_IN",
+      "desk organization",
+      AT,
+    );
+    assert.equal(
+      selected?.profileId,
+      "amazon-verified-desk-2026-10",
+    );
+    assert.equal(
+      selected?.verificationStatus,
+      "VERIFIED",
+    );
   } finally {
     database.close();
   }
