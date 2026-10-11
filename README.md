@@ -4,9 +4,11 @@ Deterministic, local-only marketplace commerce engine for the COSMO COMMERCE str
 
 ## Status
 
-The local end-to-end path is a **patched simulation candidate under independent safety re-audit**.
-
-The file-backed workflow and regression suite are green, but that is evidence—not permission to trade. PR #6 must not be merged as production-quality until the patched head receives a fresh independent audit.
+The local end-to-end safety baseline is merged and the file-backed workflow and
+regression suite are green. That is engineering evidence—not permission to
+trade. Real marketplace/supplier mutation remains blocked by Gate 0 until the
+required commercial, legal, account, supplier and economics evidence is real
+and current.
 
 It can run this lifecycle entirely on the local machine:
 
