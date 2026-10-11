@@ -150,6 +150,33 @@ Pricing is deliberately split into two levels:
 A rejected candidate never receives an actionable suggested sell price.
 The dashboard itself has no listing, purchasing or transaction authority.
 
+### Verified economics and stock pilot sizing
+
+Do not hard-code marketplace fee assumptions as truth. Start from
+`config/marketplace-economics.example.json`, replace every placeholder with
+current verified values and official/source evidence, then explicitly set
+`verificationStatus` to `VERIFIED`.
+
+Import one marketplace/category profile:
+
+```bash
+npm run economics-profile:import -- config/amazon-desk-verified.json data/commerce.sqlite
+```
+
+Importing a profile automatically recomputes all saved research rows against
+the newest applicable profile. The dashboard can then show:
+
+- demand class: EVERGREEN / SEASONAL / MIXED / UNPROVEN;
+- verified bounded sell price;
+- expected net profit per unit and stress profit;
+- decision margin and cash ROI;
+- BUY_SMALL / WATCH / DO_NOT_STOCK;
+- bounded initial units, capital required, projected batch profit, and reorder
+  point.
+
+`BUY_SMALL` is only a recommendation for an owner-approved pilot. It never
+places a supplier order or creates a marketplace listing.
+
 ## Local worker
 
 Run one due job:
