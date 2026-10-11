@@ -66,6 +66,11 @@ interface DashboardRow {
   readonly risk_json: string | null;
   readonly sources_json: string | null;
   readonly evaluation_created_at: string | null;
+  readonly advice_headline: string | null;
+  readonly advice_explanation: string | null;
+  readonly recommended_strategy_json: string | null;
+  readonly supplier_negotiation_json: string | null;
+  readonly advice_created_at: string | null;
 }
 
 export interface CommerceDashboardProduct {
@@ -122,6 +127,20 @@ export interface CommerceDashboardProduct {
       readonly url: string;
     }[];
     readonly researchedAt: string;
+    readonly advisor: null | {
+      readonly headline: string;
+      readonly explanation: string;
+      readonly recommendedStrategy: readonly string[];
+      readonly supplierNegotiation: {
+        readonly shouldNegotiate: boolean;
+        readonly objective: string;
+        readonly openingMessage: string | null;
+        readonly followUps: readonly string[];
+        readonly asks: readonly string[];
+        readonly cautions: readonly string[];
+      };
+      readonly createdAt: string;
+    };
   };
 }
 
@@ -154,6 +173,15 @@ export function loadCommerceDashboardSnapshot(
               ORDER BY e.created_at DESC, e.generated_at DESC
             ) AS rank_number
           FROM research_evaluations e
+        ),
+        ranked_advice AS (
+          SELECT
+            a.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY a.research_evaluation_id
+              ORDER BY a.created_at DESC
+            ) AS rank_number
+          FROM research_advice a
         )
         SELECT
           r.product_key,
@@ -204,11 +232,19 @@ export function loadCommerceDashboardSnapshot(
           e.blocking_reasons_json,
           e.risk_json,
           e.sources_json,
-          e.created_at AS evaluation_created_at
+          e.created_at AS evaluation_created_at,
+          a.headline AS advice_headline,
+          a.explanation AS advice_explanation,
+          a.recommended_strategy_json,
+          a.supplier_negotiation_json,
+          a.created_at AS advice_created_at
         FROM research_subjects r
         LEFT JOIN ranked_evaluations e
           ON e.product_key = r.product_key
           AND e.rank_number = 1
+        LEFT JOIN ranked_advice a
+          ON a.research_evaluation_id = e.id
+          AND a.rank_number = 1
         ORDER BY
           COALESCE(e.created_at, r.last_seen_at) DESC,
           r.generic_title ASC
@@ -297,6 +333,42 @@ export function loadCommerceDashboardSnapshot(
               readonly { readonly kind: string; readonly url: string }[]
             >(row.sources_json, []),
             researchedAt: row.evaluation_created_at,
+            advisor:
+              row.advice_headline === null ||
+              row.advice_explanation === null ||
+              row.recommended_strategy_json === null ||
+              row.supplier_negotiation_json === null ||
+              row.advice_created_at === null
+                ? null
+                : {
+                    headline: row.advice_headline,
+                    explanation: row.advice_explanation,
+                    recommendedStrategy: parseJson<
+                      readonly string[]
+                    >(
+                      row.recommended_strategy_json,
+                      [],
+                    ),
+                    supplierNegotiation: parseJson<{
+                      readonly shouldNegotiate: boolean;
+                      readonly objective: string;
+                      readonly openingMessage: string | null;
+                      readonly followUps: readonly string[];
+                      readonly asks: readonly string[];
+                      readonly cautions: readonly string[];
+                    }>(
+                      row.supplier_negotiation_json,
+                      {
+                        shouldNegotiate: false,
+                        objective: "",
+                        openingMessage: null,
+                        followUps: [],
+                        asks: [],
+                        cautions: [],
+                      },
+                    ),
+                    createdAt: row.advice_created_at,
+                  },
           };
 
     return {

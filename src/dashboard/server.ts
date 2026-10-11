@@ -613,6 +613,88 @@ const html = `<!doctype html>
       text-overflow: ellipsis;
     }
 
+    .advisor-card {
+      grid-column: 1 / -1;
+      background:
+        radial-gradient(circle at 95% 0%, rgba(124,156,255,.08), transparent 22rem),
+        rgba(255,255,255,.018);
+      border-color: rgba(124,156,255,.16);
+    }
+
+    .advisor-layout {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 1.15fr;
+      gap: 18px;
+    }
+
+    .advisor-headline {
+      font-size: 16px;
+      font-weight: 760;
+      letter-spacing: -.02em;
+      line-height: 1.35;
+      color: #eef2fb;
+    }
+
+    .advisor-copy {
+      margin-top: 9px;
+      color: #aab4c6;
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    .advisor-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .advisor-list li {
+      position: relative;
+      padding-left: 14px;
+      color: #c6cedb;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .advisor-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+    }
+
+    .negotiation-box {
+      margin-top: 10px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(0,0,0,.16);
+      color: #cbd3e0;
+      font-size: 10px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .copy-button {
+      margin-top: 9px;
+      min-height: 30px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(124,156,255,.22);
+      background: rgba(124,156,255,.08);
+      color: #cbd7ff;
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .04em;
+    }
+
+    .copy-button:hover {
+      background: rgba(124,156,255,.13);
+    }
+
     .empty {
       margin: 18px;
       min-height: 180px;
@@ -653,6 +735,7 @@ const html = `<!doctype html>
       .product-row > div:nth-child(6),
       .product-row > div:nth-child(7) { display: none; }
       .drawer-grid { grid-template-columns: repeat(2, 1fr); }
+      .advisor-layout { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 720px) {
@@ -866,6 +949,62 @@ const html = `<!doctype html>
       ).join("") + '</div>';
     }
 
+    function advisorHtml(advisor) {
+      if (!advisor) {
+        return '<div class="detail-card advisor-card">' +
+          '<div class="detail-title">ChatGPT advisor</div>' +
+          '<div class="cell-muted">No advisory note has been generated for this research decision yet.</div>' +
+        '</div>';
+      }
+
+      const negotiation = advisor.supplierNegotiation;
+      const opening = negotiation.openingMessage;
+      const encodedOpening = opening ? encodeURIComponent(opening) : "";
+
+      return '<div class="detail-card advisor-card">' +
+        '<div class="detail-title">ChatGPT advisor · explanation & action plan</div>' +
+        '<div class="advisor-layout">' +
+          '<div>' +
+            '<div class="advisor-headline">' + escapeHtml(advisor.headline) + '</div>' +
+            '<div class="advisor-copy">' + escapeHtml(advisor.explanation) + '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="detail-title">Recommended strategy</div>' +
+            '<ul class="advisor-list">' +
+              advisor.recommendedStrategy.map((item) =>
+                '<li>' + escapeHtml(item) + '</li>'
+              ).join("") +
+            '</ul>' +
+          '</div>' +
+          '<div>' +
+            '<div class="detail-title">Supplier negotiation</div>' +
+            '<div class="advisor-copy">' + escapeHtml(negotiation.objective) + '</div>' +
+            (opening
+              ? '<div class="negotiation-box">' + escapeHtml(opening) + '</div>' +
+                '<button class="copy-button" type="button" data-message="' +
+                escapeHtml(encodedOpening) + '" onclick="copyNegotiation(this)">Copy supplier message</button>'
+              : '<div class="cell-muted" style="margin-top:9px;">Negotiation is not recommended at this stage.</div>') +
+            '<div class="detail-title" style="margin-top:14px;">Ask for</div>' +
+            '<div class="pill-list">' + pillList(negotiation.asks, false) + '</div>' +
+            '<div class="detail-title" style="margin-top:14px;">Cautions</div>' +
+            '<div class="pill-list">' + pillList(negotiation.cautions, true) + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function copyNegotiation(button) {
+      const value = decodeURIComponent(button.dataset.message || "");
+      if (!value) return;
+      navigator.clipboard.writeText(value).then(() => {
+        const before = button.textContent;
+        button.textContent = "Copied";
+        setTimeout(() => {
+          button.textContent = before;
+        }, 1200);
+      });
+    }
+
     function productHtml(product) {
       const e = product.evaluation;
       const recommendation = e ? e.recommendation : "UNEVALUATED";
@@ -955,6 +1094,7 @@ const html = `<!doctype html>
           '</summary>' +
           '<div class="drawer"><div class="drawer-grid">' +
             pricingCard + demandCard + stockCard + evidenceCard +
+            advisorHtml(e ? e.advisor : null) +
           '</div></div>' +
         '</details>' +
       '</article>';

@@ -1468,6 +1468,36 @@ export const MIGRATIONS: readonly Migration[] = [
         );
     `,
   },
+  {
+    version: 22,
+    name: "chatgpt_research_advice",
+    sql: `
+      CREATE TABLE research_advice (
+        id TEXT PRIMARY KEY,
+        research_evaluation_id TEXT NOT NULL
+          REFERENCES research_evaluations(id) ON DELETE CASCADE,
+        product_key TEXT NOT NULL
+          REFERENCES research_subjects(product_key) ON DELETE RESTRICT,
+        input_hash TEXT NOT NULL,
+        model_source TEXT NOT NULL CHECK (
+          model_source = 'CHATGPT_COSMO'
+        ),
+        headline TEXT NOT NULL,
+        explanation TEXT NOT NULL,
+        recommended_strategy_json TEXT NOT NULL,
+        supplier_negotiation_json TEXT NOT NULL,
+        transaction_authority INTEGER NOT NULL DEFAULT 0
+          CHECK (transaction_authority = 0),
+        supplier_contact_authority INTEGER NOT NULL DEFAULT 0
+          CHECK (supplier_contact_authority = 0),
+        created_at TEXT NOT NULL,
+        UNIQUE (research_evaluation_id, input_hash)
+      ) STRICT;
+
+      CREATE INDEX research_advice_product_idx
+        ON research_advice(product_key, created_at DESC);
+    `,
+  },
 ];
 
 export function applyMigrations(
