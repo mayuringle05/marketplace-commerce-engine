@@ -1517,6 +1517,7 @@ export const MIGRATIONS: readonly Migration[] = [
           )
         );
     `,
+  },
 ];
 
 export function applyMigrations(
