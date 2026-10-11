@@ -353,8 +353,8 @@ export function buildCommerceAdvisorPacket(
         factBase.projectedBatchProfitPaise,
       reorderPointUnits: factBase.reorderPointUnits,
       sources: factBase.sources,
-      transactionAuthority: false,
-      supplierContactAuthority: false,
+      transactionAuthority: false as const,
+      supplierContactAuthority: false as const,
     };
   });
 
