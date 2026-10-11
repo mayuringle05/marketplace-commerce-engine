@@ -350,3 +350,17 @@ test("latest stale snapshot does not fall back to an older fresh-looking offer",
     database.close();
   }
 });
+
+test("offer becomes stale one millisecond beyond the configured freshness boundary", () => {
+  const decision = evaluateOfferFreshness(
+    snapshot(),
+    "2026-10-07T00:15:00.001Z",
+    {
+      maximumObservationAgeSeconds: 600,
+    },
+  );
+
+  assert.equal(decision.state, "STALE");
+  assert.equal(decision.exposable, false);
+  assert.equal(decision.ageSeconds, 600);
+});

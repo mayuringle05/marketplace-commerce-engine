@@ -31,3 +31,14 @@ jobs:
 
       - name: Verify source, typecheck, and test
         run: npm run check
+
+      - name: Run file-backed end-to-end simulation
+        run: npm run demo:e2e -- data/ci-e2e.sqlite
+
+      - name: Verify live mode fails closed by default
+        run: |
+          set +e
+          npm run gate0:status -- config/gate0.example.json
+          code=$?
+          set -e
+          test "$code" -eq 2

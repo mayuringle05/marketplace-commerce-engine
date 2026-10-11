@@ -104,10 +104,16 @@ test("classifies exact brand plus MPN fallback as B", () => {
     {
       brand: "Acme",
       mpn: "ABC-123",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
     },
     {
       brand: " acme ",
       mpn: "abc-123",
+      condition: "NEW",
+      marketRegion: "in",
+      packCount: 1,
     },
   );
 
@@ -120,10 +126,16 @@ test("classifies exact brand plus model fallback as B", () => {
     {
       brand: "Acme",
       model: "Desk Fan 20",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
     },
     {
       brand: "ACME",
       model: "desk fan 20",
+      condition: "NEW",
+      marketRegion: "in",
+      packCount: 1,
     },
   );
 
@@ -131,7 +143,7 @@ test("classifies exact brand plus model fallback as B", () => {
   assert.deepEqual(result.reasons, ["EXACT_BRAND_AND_MODEL"]);
 });
 
-test("classifies brand-only evidence as C and does not auto-approve it", () => {
+test("hard-vetoes contradictory models instead of treating brand support as C", () => {
   const result = classifyIdentity(
     {
       brand: "Acme",
@@ -143,8 +155,8 @@ test("classifies brand-only evidence as C and does not auto-approve it", () => {
     },
   );
 
-  assert.equal(result.classification, "C");
-  assert.deepEqual(result.reasons, ["BRAND_SUPPORT_ONLY"]);
+  assert.equal(result.classification, "CONFLICT");
+  assert.deepEqual(result.reasons, ["MODEL_CONTRADICTION"]);
 });
 
 test("classifies no strong evidence as D", () => {
@@ -281,4 +293,53 @@ test("only A and B identity classes are automation-eligible", () => {
   assert.equal(isAutomationEligibleIdentityClass("C"), false);
   assert.equal(isAutomationEligibleIdentityClass("D"), false);
   assert.equal(isAutomationEligibleIdentityClass("CONFLICT"), false);
+});
+
+test("hard-vetoes conflicting MPN even when brand and model match", () => {
+  const result = classifyIdentity(
+    {
+      brand: "Acme",
+      model: "Desk Fan 20",
+      mpn: "MPN-A",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
+    },
+    {
+      brand: "Acme",
+      model: "Desk Fan 20",
+      mpn: "MPN-B",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
+    },
+  );
+
+  assert.equal(result.classification, "CONFLICT");
+  assert.ok(result.reasons.includes("MPN_CONTRADICTION"));
+});
+
+test("brand plus MPN remains WATCH-like C when operational attributes are missing", () => {
+  const result = classifyIdentity(
+    {
+      brand: "Acme",
+      mpn: "ABC-123",
+      condition: "new",
+      marketRegion: "IN",
+      packCount: 1,
+    },
+    {
+      brand: "Acme",
+      mpn: "ABC-123",
+    },
+  );
+
+  assert.equal(result.classification, "C");
+  assert.deepEqual(result.reasons, [
+    "MISSING_REQUIRED_ATTRIBUTES",
+  ]);
+  assert.equal(
+    isAutomationEligibleIdentityClass(result.classification),
+    false,
+  );
 });

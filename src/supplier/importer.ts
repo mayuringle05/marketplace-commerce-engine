@@ -5,6 +5,7 @@ import type {
   SupplierFeed,
   SupplierFeedOffer,
 } from "./feed.ts";
+import { deterministicId } from "../core/deterministic.ts";
 
 export interface SupplierImportResult {
   readonly inserted: number;
@@ -27,6 +28,147 @@ interface ExistingOfferRow {
   readonly package_length_mm: bigint | null;
   readonly package_width_mm: bigint | null;
   readonly package_height_mm: bigint | null;
+}
+
+
+interface SupplyPoolRow {
+  readonly id: string;
+  readonly product_id: string;
+  readonly fulfilment_route_id: string;
+  readonly consumed_units: bigint;
+  readonly latest_observed_at: string;
+}
+
+function ensureSupplyPool(
+  database: DatabaseSync,
+  feed: SupplierFeed,
+  offer: SupplierFeedOffer,
+): SupplyPoolRow {
+  const existing = database
+    .prepare(
+      `
+        SELECT
+          id,
+          product_id,
+          fulfilment_route_id,
+          consumed_units,
+          latest_observed_at
+        FROM supply_pools
+        WHERE supplier_id = ?
+          AND supplier_sku = ?
+      `,
+    )
+    .get(feed.supplierId, offer.supplierSku) as
+    | SupplyPoolRow
+    | undefined;
+
+  if (existing !== undefined) {
+    if (
+      existing.product_id !== offer.productId ||
+      existing.fulfilment_route_id !== offer.fulfilmentRouteId
+    ) {
+      throw new Error(
+        `Supplier SKU ${offer.supplierSku} changed product or fulfilment route.`,
+      );
+    }
+
+    if (BigInt(offer.allocatedUnits) < existing.consumed_units) {
+      throw new Error(
+        `Supplier SKU ${offer.supplierSku} allocation is below already consumed units.`,
+      );
+    }
+
+    return existing;
+  }
+
+  const id = deterministicId(
+    "pool",
+    feed.supplierId,
+    offer.supplierSku,
+  );
+
+  database
+    .prepare(
+      `
+        INSERT INTO supply_pools (
+          id,
+          supplier_id,
+          supplier_sku,
+          product_id,
+          fulfilment_route_id,
+          allocated_units,
+          available_units,
+          consumed_units,
+          latest_offer_id,
+          latest_observed_at,
+          version,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, 1, ?)
+      `,
+    )
+    .run(
+      id,
+      feed.supplierId,
+      offer.supplierSku,
+      offer.productId,
+      offer.fulfilmentRouteId,
+      offer.allocatedUnits,
+      offer.availableUnits,
+      feed.observedAt,
+      feed.observedAt,
+    );
+
+  return {
+    id,
+    product_id: offer.productId,
+    fulfilment_route_id: offer.fulfilmentRouteId,
+    consumed_units: 0n,
+    latest_observed_at: feed.observedAt,
+  };
+}
+
+function linkOfferToPool(
+  database: DatabaseSync,
+  offerId: string,
+  pool: SupplyPoolRow,
+  feed: SupplierFeed,
+  offer: SupplierFeedOffer,
+): void {
+  database
+    .prepare(
+      `
+        INSERT OR IGNORE INTO source_offer_supply_pools (
+          offer_id,
+          pool_id
+        ) VALUES (?, ?)
+      `,
+    )
+    .run(offerId, pool.id);
+
+  if (feed.observedAt >= pool.latest_observed_at) {
+    database
+      .prepare(
+        `
+          UPDATE supply_pools
+          SET
+            allocated_units = ?,
+            available_units = ?,
+            latest_offer_id = ?,
+            latest_observed_at = ?,
+            version = version + 1,
+            updated_at = ?
+          WHERE id = ?
+        `,
+      )
+      .run(
+        offer.allocatedUnits,
+        offer.availableUnits,
+        offerId,
+        feed.observedAt,
+        feed.observedAt,
+        pool.id,
+      );
+  }
 }
 
 function deterministicOfferId(
@@ -201,6 +343,12 @@ export function importSupplierFeed(
         offer.fulfilmentRouteId,
       );
 
+      const pool = ensureSupplyPool(
+        database,
+        feed,
+        offer,
+      );
+      const offerId = deterministicOfferId(feed, offer);
       const existing = findExisting(database, feed, offer);
 
       if (existing !== undefined) {
@@ -210,12 +358,19 @@ export function importSupplierFeed(
           );
         }
 
+        linkOfferToPool(
+          database,
+          existing.id,
+          pool,
+          feed,
+          offer,
+        );
         unchanged += 1;
         continue;
       }
 
       insert.run(
-        deterministicOfferId(feed, offer),
+        offerId,
         feed.supplierId,
         offer.productId,
         offer.supplierSku,
@@ -233,6 +388,13 @@ export function importSupplierFeed(
         offer.package.lengthMm,
         offer.package.widthMm,
         offer.package.heightMm,
+      );
+      linkOfferToPool(
+        database,
+        offerId,
+        pool,
+        feed,
+        offer,
       );
       inserted += 1;
     }

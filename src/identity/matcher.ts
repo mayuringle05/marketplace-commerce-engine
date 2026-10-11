@@ -16,6 +16,9 @@ export type IdentityReason =
   | "INVALID_ASSERTED_IDENTIFIER"
   | "GLOBAL_IDENTIFIER_CONFLICT"
   | "BRAND_CONTRADICTION"
+  | "MPN_CONTRADICTION"
+  | "MODEL_CONTRADICTION"
+  | "MISSING_REQUIRED_ATTRIBUTES"
   | "PACK_COUNT_CONTRADICTION"
   | "VARIANT_CONTRADICTION"
   | "CONDITION_CONTRADICTION"
@@ -104,6 +107,12 @@ function hardContradictionReasons(
   if (comparableEqual(canonical.brand, observed.brand) === false) {
     reasons.push("BRAND_CONTRADICTION");
   }
+  if (comparableEqual(canonical.mpn, observed.mpn) === false) {
+    reasons.push("MPN_CONTRADICTION");
+  }
+  if (comparableEqual(canonical.model, observed.model) === false) {
+    reasons.push("MODEL_CONTRADICTION");
+  }
   if (comparableEqual(canonical.condition, observed.condition) === false) {
     reasons.push("CONDITION_CONTRADICTION");
   }
@@ -128,6 +137,36 @@ function hardContradictionReasons(
   }
 
   return reasons;
+}
+
+function hasRequiredOperationalAttributes(
+  canonical: IdentityProfile,
+  observed: IdentityProfile,
+): boolean {
+  if (
+    normalizeComparableText(observed.condition) === null ||
+    normalizeComparableText(observed.marketRegion) === null ||
+    observed.packCount === null ||
+    observed.packCount === undefined
+  ) {
+    return false;
+  }
+
+  if (
+    normalizeComparableText(canonical.variant) !== null &&
+    normalizeComparableText(observed.variant) === null
+  ) {
+    return false;
+  }
+
+  if (
+    normalizeComparableText(canonical.edition) !== null &&
+    normalizeComparableText(observed.edition) === null
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function exactBrandAndMpn(
@@ -205,6 +244,13 @@ export function classifyIdentity(
   }
 
   if (exactBrandAndMpn(canonical, observed)) {
+    if (!hasRequiredOperationalAttributes(canonical, observed)) {
+      return {
+        classification: "C",
+        reasons: ["MISSING_REQUIRED_ATTRIBUTES"],
+        matchedGlobalKeys: [],
+      };
+    }
     return {
       classification: "B",
       reasons: ["EXACT_BRAND_AND_MPN"],
@@ -213,6 +259,13 @@ export function classifyIdentity(
   }
 
   if (exactBrandAndModel(canonical, observed)) {
+    if (!hasRequiredOperationalAttributes(canonical, observed)) {
+      return {
+        classification: "C",
+        reasons: ["MISSING_REQUIRED_ATTRIBUTES"],
+        matchedGlobalKeys: [],
+      };
+    }
     return {
       classification: "B",
       reasons: ["EXACT_BRAND_AND_MODEL"],

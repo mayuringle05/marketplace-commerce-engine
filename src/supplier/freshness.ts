@@ -98,7 +98,8 @@ export function evaluateOfferFreshness(
     );
   }
 
-  const ageSeconds = Math.floor((asOfMs - observedAtMs) / 1_000);
+  const ageMilliseconds = asOfMs - observedAtMs;
+  const ageSeconds = Math.floor(ageMilliseconds / 1_000);
 
   if (asOfMs < validFromMs) {
     return {
@@ -118,7 +119,10 @@ export function evaluateOfferFreshness(
     };
   }
 
-  if (ageSeconds > policy.maximumObservationAgeSeconds) {
+  if (
+    ageMilliseconds >
+    policy.maximumObservationAgeSeconds * 1_000
+  ) {
     return {
       state: "STALE",
       exposable: false,
