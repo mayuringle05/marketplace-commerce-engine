@@ -6,6 +6,9 @@ import {
 } from "../core/deterministic.ts";
 import { readCashAvailability } from "../cash/state.ts";
 import {
+  evaluateFulfilmentCompatibility,
+} from "../fulfilment/compatibility.ts";
+import {
   readSimulatedListing,
   upsertSimulatedListing,
 } from "../marketplace/simulated.ts";
@@ -41,6 +44,7 @@ interface ListingGateRow {
   readonly trade_unit_product_id: string;
   readonly source_product_id: string;
   readonly supplier_status: string;
+  readonly fulfilment_route_id: string;
   readonly route_active: bigint;
   readonly single_unit_dispatch_verified: bigint;
   readonly return_route_verified: bigint;
@@ -78,6 +82,7 @@ function loadListingGate(
           t.product_id AS trade_unit_product_id,
           s.product_id AS source_product_id,
           supplier.status AS supplier_status,
+          route.id AS fulfilment_route_id,
           route.active AS route_active,
           route.single_unit_dispatch_verified,
           route.return_route_verified,
@@ -225,6 +230,17 @@ export function syncListingToSimulatedMarketplace(
 
   const gate = loadListingGate(database, input);
   const requiredCashPerUnit = assertListingGate(input, gate);
+  const compatibility = evaluateFulfilmentCompatibility(
+    database,
+    gate.fulfilment_route_id,
+    input.updatedAt,
+  );
+  if (!compatibility.compatible) {
+    throw new Error(
+      `Fulfilment compatibility not verified: ${compatibility.blockingReasons.join(",")}`,
+    );
+  }
+
   const id = deterministicId(
     "listing",
     input.marketplace,
