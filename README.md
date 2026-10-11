@@ -150,12 +150,21 @@ Pricing is deliberately split into two levels:
 A rejected candidate never receives an actionable suggested sell price.
 The dashboard itself has no listing, purchasing or transaction authority.
 
-### Verified economics and stock pilot sizing
+### Marketplace economics and stock pilot sizing
 
-Do not hard-code marketplace fee assumptions as truth. Start from
-`config/marketplace-economics.example.json`, replace every placeholder with
-current verified values and official/source evidence, then explicitly set
-`verificationStatus` to `VERIFIED`.
+Do not hard-code marketplace fee assumptions as truth. Economics profiles have
+two evidence levels:
+
+- `PUBLIC_STANDARD`: current public marketplace rate-card inputs. These may
+  produce indicative net economics, but they can never authorize
+  `BUY_SMALL`.
+- `VERIFIED`: current seller-account/category/fulfilment inputs checked for
+  the exact scenario. Only these profiles can produce a seller-verified net
+  result and a bounded stock-pilot recommendation.
+
+Start from `config/marketplace-economics.example.json`, replace every
+placeholder with current values and evidence, and choose the evidence level
+truthfully.
 
 Import one marketplace/category profile:
 
