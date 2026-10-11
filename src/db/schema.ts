@@ -1467,6 +1467,7 @@ export const MIGRATIONS: readonly Migration[] = [
           reorder_point_units IS NULL OR reorder_point_units >= 0
         );
     `,
+  },
 ];
 
 export function applyMigrations(
