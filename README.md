@@ -123,6 +123,31 @@ npm run exposure -- resume data/commerce.sqlite OWNER_RECONCILED
 
 Liquidity shortfall can also force global stop-new-exposure and pause active listings.
 
+## Local research dashboard
+
+COSMO buyer-intent and deep-research results are persisted in the same local
+SQLite database used by the commerce engine. Launch the read-only dashboard:
+
+```bash
+npm run dashboard -- data/commerce.sqlite
+```
+
+Then open `http://127.0.0.1:4399`.
+
+The dashboard shows tracked product ideas, intent/urgency, Amazon/Flipkart
+research, demand and competition scores, evidence links, recommendation,
+blockers, and deterministic research-stage pricing.
+
+Pricing is deliberately split into two levels:
+
+- **research pricing**: market reference, supplier cost, gross price band,
+  estimated gross profit and gross margin;
+- **verified net economics**: only available after current marketplace fees,
+  tax treatment, shipping, returns and other material costs are known.
+
+A rejected candidate never receives an actionable suggested sell price.
+The dashboard itself has no listing, purchasing or transaction authority.
+
 ## Local worker
 
 Run one due job:
