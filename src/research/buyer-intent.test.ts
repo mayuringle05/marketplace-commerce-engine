@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { openDatabase } from "../db/database.ts";
+import { seedSingleSkuFixture } from "../test/commerce-fixture.ts";
 import {
   canonicalResearchProductSignature,
   filterBuyerIntentHypotheses,
@@ -266,6 +267,58 @@ test("weak buyer intent and duplicate product hypotheses never reach deep resear
     assert.equal(
       duplicateResult.rejected[0]?.blockingReason,
       "DUPLICATE_IN_BATCH",
+    );
+  } finally {
+    database.close();
+  }
+});
+
+test("confirmed listings automatically become permanent research exclusions", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    seedSingleSkuFixture(database, {
+      researchTitle: "Generic desk cable organizer",
+      researchCategory: "desk organization",
+    });
+
+    const key = researchProductKey(
+      "Generic desk cable organizer",
+      "desk organization",
+    );
+    const subject = database
+      .prepare(
+        `
+          SELECT lifecycle_state, listed_at
+          FROM research_subjects
+          WHERE product_key = ?
+        `,
+      )
+      .get(key) as {
+      lifecycle_state: string;
+      listed_at: string | null;
+    };
+
+    assert.equal(subject.lifecycle_state, "LISTED");
+    assert.equal(
+      subject.listed_at,
+      "2026-10-07T00:11:00.000Z",
+    );
+
+    const parsed = parseBuyerIntentFilterBatchJson(batch());
+    const result = filterBuyerIntentHypotheses(
+      database,
+      parsed,
+      "2027-10-11T10:00:00.000Z",
+      30,
+    );
+
+    assert.equal(result.accepted.length, 0);
+    assert.equal(
+      result.rejected[0]?.blockingReason,
+      "ALREADY_LISTED",
     );
   } finally {
     database.close();
