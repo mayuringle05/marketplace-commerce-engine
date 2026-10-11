@@ -16,6 +16,9 @@ import {
 import {
   persistResearchEvaluation,
 } from "../research/research-store.ts";
+import {
+  buildVerifiedCommerceStrategy,
+} from "../research/verified-strategy.ts";
 import { loadCommerceDashboardSnapshot } from "./data.ts";
 
 const GENERATED_AT = "2026-10-11T10:00:00.000Z";
@@ -96,6 +99,12 @@ test("dashboard snapshot exposes persisted intent, research, evidence and pricin
       item,
       evaluation,
     );
+    const verifiedStrategy = buildVerifiedCommerceStrategy(
+      item,
+      evaluation,
+      pricing,
+      null,
+    );
     const productKey = recordDeepResearchOutcome(
       database,
       {
@@ -118,6 +127,7 @@ test("dashboard snapshot exposes persisted intent, research, evidence and pricin
         candidate: item,
         evaluation,
         pricing,
+        verifiedStrategy,
       },
     );
 
@@ -144,6 +154,9 @@ test("dashboard snapshot exposes persisted intent, research, evidence and pricin
     );
     assert.equal(product.evaluation?.sources.length, 3);
     assert.equal(product.evaluation?.netProfitVerified, false);
+    assert.equal(product.evaluation?.demandClass, "EVERGREEN");
+    assert.equal(product.evaluation?.stockDecision, "WATCH");
+    assert.equal(product.evaluation?.recommendedStockUnits, 0);
   } finally {
     database.close();
   }
