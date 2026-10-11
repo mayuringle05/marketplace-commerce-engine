@@ -9,6 +9,12 @@ import {
   evaluateDiscoveryCandidate,
   parseProductDiscoveryBatchJson,
 } from "../research/product-discovery.ts";
+import {
+  buildResearchPricingStrategy,
+} from "../research/pricing-strategy.ts";
+import {
+  persistResearchEvaluation,
+} from "../research/research-store.ts";
 
 const filePath = process.argv[2];
 const dbPath = process.argv[3];
@@ -41,7 +47,7 @@ if (dbPath !== undefined) {
           "Discovery result/candidate cardinality mismatch.",
         );
       }
-      recordDeepResearchOutcome(
+      const productKey = recordDeepResearchOutcome(
         database,
         {
           candidateId: candidate.candidateId,
@@ -50,6 +56,21 @@ if (dbPath !== undefined) {
           recommendation: result.recommendation,
         },
         now,
+      );
+      const pricing = buildResearchPricingStrategy(
+        candidate,
+        result,
+      );
+      persistResearchEvaluation(
+        database,
+        {
+          productKey,
+          generatedAt: batch.generatedAt,
+          recordedAt: now,
+          candidate,
+          evaluation: result,
+          pricing,
+        },
       );
     }
   } finally {
