@@ -1286,6 +1286,7 @@ export const MIGRATIONS: readonly Migration[] = [
         created_at TEXT NOT NULL
       ) STRICT;
     `,
+  },
 ];
 
 export function applyMigrations(
