@@ -57,7 +57,7 @@ const html = `<!doctype html>
     }
     .stats {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(8, minmax(0, 1fr));
       gap: 10px;
       margin: 24px 0;
     }
@@ -72,7 +72,7 @@ const html = `<!doctype html>
     .stat strong { display: block; margin-top: 10px; font-size: 27px; }
     .toolbar {
       display: grid;
-      grid-template-columns: minmax(240px, 1fr) 190px 190px;
+      grid-template-columns: minmax(240px, 1fr) 180px 180px 180px;
       gap: 10px;
       margin: 18px 0;
     }
@@ -95,7 +95,7 @@ const html = `<!doctype html>
     }
     .product-main {
       display: grid;
-      grid-template-columns: 2.1fr .9fr .8fr .8fr .9fr .9fr;
+      grid-template-columns: 2fr .9fr .8fr .7fr .9fr .9fr .9fr;
       gap: 14px;
       padding: 17px 18px;
       align-items: center;
@@ -116,7 +116,9 @@ const html = `<!doctype html>
     }
     .badge.INVESTIGATE { color: var(--good); background: rgba(111,224,168,.08); }
     .badge.HOLD { color: var(--warn); background: rgba(244,202,114,.08); }
-    .badge.REJECT, .badge.BLOCKED { color: var(--bad); background: rgba(255,133,143,.08); }
+    .badge.REJECT, .badge.BLOCKED, .badge.DO_NOT_STOCK { color: var(--bad); background: rgba(255,133,143,.08); }
+    .badge.BUY_SMALL { color: var(--good); background: rgba(111,224,168,.08); }
+    .badge.WATCH { color: var(--warn); background: rgba(244,202,114,.08); }
     details { border-top: 1px solid var(--line); }
     summary {
       cursor: pointer;
@@ -177,6 +179,12 @@ const html = `<!doctype html>
         <option value="AMAZON_IN">Amazon India</option>
         <option value="FLIPKART_IN">Flipkart India</option>
       </select>
+      <select id="stock">
+        <option value="">All stock decisions</option>
+        <option value="BUY_SMALL">Buy small</option>
+        <option value="WATCH">Watch</option>
+        <option value="DO_NOT_STOCK">Do not stock</option>
+      </select>
     </section>
 
     <section class="grid" id="products"></section>
@@ -224,6 +232,8 @@ const html = `<!doctype html>
         ["Investigate", s.investigate],
         ["Hold", s.hold],
         ["Reject", s.reject],
+        ["Buy small", s.buySmall],
+        ["Stock watch", s.stockWatch],
         ["Listed", s.listed]
       ];
       document.getElementById("stats").innerHTML = items.map(([label, value]) =>
@@ -236,7 +246,9 @@ const html = `<!doctype html>
       const e = product.evaluation;
       const recommendation = e ? e.recommendation : "UNEVALUATED";
       const strategy = e ? e.pricingStrategy : "—";
+      const stockDecision = e ? (e.stockDecision ?? "WATCH") : "WATCH";
       const blockers = e ? e.blockingReasons : [];
+      const economicsReasons = e ? e.economicsReasons : [];
       const sources = e ? e.sources : [];
       const risks = e
         ? Object.entries(e.risk).filter(([, active]) => active).map(([key]) => key)
@@ -256,8 +268,10 @@ const html = `<!doctype html>
           escapeHtml(e ? score(e.demandScore) : "—") + '</div></div>' +
           '<div><div class="metric-label">Market ref.</div><div class="metric-value">' +
           escapeHtml(e ? money(e.marketReferencePricePaise) : "—") + '</div></div>' +
-          '<div><div class="metric-label">Suggested</div><div class="metric-value">' +
-          escapeHtml(e ? money(e.suggestedPricePaise) : "—") + '</div></div>' +
+          '<div><div class="metric-label">Verified price</div><div class="metric-value">' +
+          escapeHtml(e ? money(e.verifiedPricePaise ?? e.suggestedPricePaise) : "—") + '</div></div>' +
+          '<div><div class="metric-label">Stock</div><div class="metric-value"><span class="badge ' +
+          escapeHtml(stockDecision) + '">' + escapeHtml(stockDecision) + '</span></div></div>' +
         '</div>' +
         '<details><summary>View economics, strategy, blockers & evidence</summary>' +
           '<div class="detail">' +
@@ -270,17 +284,34 @@ const html = `<!doctype html>
               '<div class="meta">Gross profit/unit: ' + escapeHtml(e ? money(e.estimatedGrossProfitPaise) : "—") + '</div>' +
               '<div class="meta">Gross margin: ' + escapeHtml(e ? pct(e.estimatedGrossMarginBps) : "—") + '</div>' +
               '<div class="meta">Pricing confidence: ' + escapeHtml(e ? score(e.pricingConfidenceScore) : "—") + '/100</div>' +
+              '<h3>Verified economics</h3>' +
+              '<div class="meta">Economics profile: ' + escapeHtml(e ? (e.economicsProfileId ?? "Missing") : "—") + '</div>' +
+              '<div class="meta">Economics status: ' + escapeHtml(e ? (e.economicsStatus ?? "Not verified") : "—") + '</div>' +
+              '<div class="meta">Verified price: ' + escapeHtml(e ? money(e.verifiedPricePaise) : "—") + '</div>' +
+              '<div class="meta">Expected net profit/unit: ' + escapeHtml(e ? money(e.expectedNetProfitPaise) : "—") + '</div>' +
+              '<div class="meta">Decision margin: ' + escapeHtml(e ? pct(e.decisionMarginBps) : "—") + '</div>' +
+              '<div class="meta">Cash ROI: ' + escapeHtml(e ? pct(e.cashRoiBps) : "—") + '</div>' +
+              '<div class="meta">Stress net profit/unit: ' + escapeHtml(e ? money(e.stressNetProfitPaise) : "—") + '</div>' +
               '<div class="meta">Net profit verified: ' + (e && e.netProfitVerified ? "YES" : "NO") + '</div>' +
             '</div>' +
             '<div><h3>Demand & risk</h3>' +
+              '<div class="meta">Demand class: ' + escapeHtml(e ? (e.demandClass ?? "—") : "—") + '</div>' +
               '<div class="meta">Competition: ' + escapeHtml(e ? score(e.competitionScore) : "—") + '/100</div>' +
               '<div class="meta">Trend confidence: ' + escapeHtml(e ? score(e.trendConfidence) : "—") + '/100</div>' +
               '<div class="meta">Reactive / Predictive / Structural: ' +
               escapeHtml(e ? e.demandReactive + " / " + e.demandPredictive + " / " + e.demandStructural : "—") +
               '</div><div class="pillrow" style="margin-top:10px">' +
               (risks.length ? risks.map((r) => '<span class="pill">' + escapeHtml(r) + '</span>').join("") : '<span class="pill">No flagged physical risk</span>') +
-              '</div><h3>Blockers</h3><div class="pillrow">' +
+              '</div><h3>Stock recommendation</h3>' +
+              '<div class="meta">Decision: ' + escapeHtml(stockDecision) + '</div>' +
+              '<div class="meta">Initial units: ' + escapeHtml(e ? e.recommendedStockUnits : 0) + '</div>' +
+              '<div class="meta">Capital: ' + escapeHtml(e ? money(e.stockCapitalPaise) : "—") + '</div>' +
+              '<div class="meta">Projected batch profit: ' + escapeHtml(e ? money(e.projectedBatchProfitPaise) : "—") + '</div>' +
+              '<div class="meta">Reorder point: ' + escapeHtml(e ? e.reorderPointUnits : 0) + ' units</div>' +
+              '<h3>Blockers</h3><div class="pillrow">' +
               (blockers.length ? blockers.map((b) => '<span class="pill">' + escapeHtml(b) + '</span>').join("") : '<span class="pill">None</span>') +
+              '</div><h3>Economics reasons</h3><div class="pillrow">' +
+              (economicsReasons.length ? economicsReasons.map((b) => '<span class="pill">' + escapeHtml(b) + '</span>').join("") : '<span class="pill">None</span>') +
               '</div></div>' +
             '<div><h3>Evidence</h3>' +
               (sources.length ? sources.map((source) =>
@@ -302,6 +333,7 @@ const html = `<!doctype html>
       const query = document.getElementById("search").value.trim().toLowerCase();
       const rec = document.getElementById("recommendation").value;
       const market = document.getElementById("marketplace").value;
+      const stock = document.getElementById("stock").value;
 
       const products = snapshot.products.filter((product) => {
         const e = product.evaluation;
@@ -315,7 +347,8 @@ const html = `<!doctype html>
         const recommendation = e ? e.recommendation : "UNEVALUATED";
         const matchesRec = !rec || recommendation === rec;
         const matchesMarket = !market || (e && e.marketplace === market);
-        return matchesQuery && matchesRec && matchesMarket;
+        const matchesStock = !stock || (e && e.stockDecision === stock);
+        return matchesQuery && matchesRec && matchesMarket && matchesStock;
       });
 
       document.getElementById("products").innerHTML = products.length
@@ -334,7 +367,7 @@ const html = `<!doctype html>
       renderProducts();
     }
 
-    for (const id of ["search", "recommendation", "marketplace"]) {
+    for (const id of ["search", "recommendation", "marketplace", "stock"]) {
       document.getElementById(id).addEventListener(
         id === "search" ? "input" : "change",
         () => snapshot && renderProducts()
