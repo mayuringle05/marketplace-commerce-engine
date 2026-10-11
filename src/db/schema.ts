@@ -1389,6 +1389,84 @@ export const MIGRATIONS: readonly Migration[] = [
         ON research_evaluations(recommendation, created_at DESC);
     `,
   },
+  {
+    version: 21,
+    name: "verified_economics_and_stock_strategy",
+    sql: `
+      CREATE TABLE marketplace_economics_profiles (
+        profile_id TEXT PRIMARY KEY,
+        marketplace TEXT NOT NULL CHECK (
+          marketplace IN ('AMAZON_IN', 'FLIPKART_IN')
+        ),
+        category_scope TEXT NOT NULL,
+        effective_from TEXT NOT NULL,
+        effective_until TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        source_version TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        profile_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        CHECK (effective_until > effective_from)
+      ) STRICT;
+
+      CREATE INDEX marketplace_economics_profiles_lookup_idx
+        ON marketplace_economics_profiles(
+          marketplace,
+          category_scope,
+          effective_from,
+          effective_until,
+          verified_at
+        );
+
+      ALTER TABLE research_evaluations
+        ADD COLUMN demand_class TEXT CHECK (
+          demand_class IS NULL OR
+          demand_class IN ('EVERGREEN', 'SEASONAL', 'MIXED', 'UNPROVEN')
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_profile_id TEXT
+          REFERENCES marketplace_economics_profiles(profile_id)
+          ON DELETE RESTRICT;
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_status TEXT CHECK (
+          economics_status IS NULL OR
+          economics_status IN ('PASS', 'WATCH', 'REJECT')
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN verified_price_paise INTEGER CHECK (
+          verified_price_paise IS NULL OR verified_price_paise > 0
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN expected_net_profit_paise INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN decision_margin_bps INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN cash_roi_bps INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN stress_net_profit_paise INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_reasons_json TEXT;
+      ALTER TABLE research_evaluations
+        ADD COLUMN stock_decision TEXT CHECK (
+          stock_decision IS NULL OR
+          stock_decision IN ('BUY_SMALL', 'WATCH', 'DO_NOT_STOCK')
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN recommended_stock_units INTEGER CHECK (
+          recommended_stock_units IS NULL OR
+          recommended_stock_units >= 0
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN stock_capital_paise INTEGER CHECK (
+          stock_capital_paise IS NULL OR stock_capital_paise >= 0
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN projected_batch_profit_paise INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN reorder_point_units INTEGER CHECK (
+          reorder_point_units IS NULL OR reorder_point_units >= 0
+        );
+    `,
 ];
 
 export function applyMigrations(
