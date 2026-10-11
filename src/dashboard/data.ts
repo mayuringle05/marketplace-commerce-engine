@@ -48,6 +48,20 @@ interface DashboardRow {
   readonly estimated_gross_profit_paise: bigint | null;
   readonly estimated_gross_margin_bps: bigint | null;
   readonly net_profit_verified: bigint | null;
+  readonly demand_class: string | null;
+  readonly economics_profile_id: string | null;
+  readonly economics_status: string | null;
+  readonly verified_price_paise: bigint | null;
+  readonly expected_net_profit_paise: bigint | null;
+  readonly decision_margin_bps: bigint | null;
+  readonly cash_roi_bps: bigint | null;
+  readonly stress_net_profit_paise: bigint | null;
+  readonly economics_reasons_json: string | null;
+  readonly stock_decision: string | null;
+  readonly recommended_stock_units: bigint | null;
+  readonly stock_capital_paise: bigint | null;
+  readonly projected_batch_profit_paise: bigint | null;
+  readonly reorder_point_units: bigint | null;
   readonly blocking_reasons_json: string | null;
   readonly risk_json: string | null;
   readonly sources_json: string | null;
@@ -87,6 +101,20 @@ export interface CommerceDashboardProduct {
     readonly estimatedGrossProfitPaise: number | null;
     readonly estimatedGrossMarginBps: number | null;
     readonly netProfitVerified: boolean;
+    readonly demandClass: string | null;
+    readonly economicsProfileId: string | null;
+    readonly economicsStatus: string | null;
+    readonly verifiedPricePaise: number | null;
+    readonly expectedNetProfitPaise: number | null;
+    readonly decisionMarginBps: number | null;
+    readonly cashRoiBps: number | null;
+    readonly stressNetProfitPaise: number | null;
+    readonly economicsReasons: readonly string[];
+    readonly stockDecision: string | null;
+    readonly recommendedStockUnits: number;
+    readonly stockCapitalPaise: number;
+    readonly projectedBatchProfitPaise: number | null;
+    readonly reorderPointUnits: number;
     readonly blockingReasons: readonly string[];
     readonly risk: Readonly<Record<string, boolean>>;
     readonly sources: readonly {
@@ -106,6 +134,8 @@ export interface CommerceDashboardSnapshot {
     readonly hold: number;
     readonly reject: number;
     readonly listed: number;
+    readonly buySmall: number;
+    readonly stockWatch: number;
   };
   readonly products: readonly CommerceDashboardProduct[];
 }
@@ -157,6 +187,20 @@ export function loadCommerceDashboardSnapshot(
           e.estimated_gross_profit_paise,
           e.estimated_gross_margin_bps,
           e.net_profit_verified,
+          e.demand_class,
+          e.economics_profile_id,
+          e.economics_status,
+          e.verified_price_paise,
+          e.expected_net_profit_paise,
+          e.decision_margin_bps,
+          e.cash_roi_bps,
+          e.stress_net_profit_paise,
+          e.economics_reasons_json,
+          e.stock_decision,
+          e.recommended_stock_units,
+          e.stock_capital_paise,
+          e.projected_batch_profit_paise,
+          e.reorder_point_units,
           e.blocking_reasons_json,
           e.risk_json,
           e.sources_json,
@@ -215,6 +259,32 @@ export function loadCommerceDashboardSnapshot(
               asNumber(row.estimated_gross_margin_bps),
             netProfitVerified:
               asNumber(row.net_profit_verified) === 1,
+            demandClass: row.demand_class,
+            economicsProfileId: row.economics_profile_id,
+            economicsStatus: row.economics_status,
+            verifiedPricePaise:
+              asNumber(row.verified_price_paise),
+            expectedNetProfitPaise:
+              asNumber(row.expected_net_profit_paise),
+            decisionMarginBps:
+              asNumber(row.decision_margin_bps),
+            cashRoiBps:
+              asNumber(row.cash_roi_bps),
+            stressNetProfitPaise:
+              asNumber(row.stress_net_profit_paise),
+            economicsReasons: parseJson<readonly string[]>(
+              row.economics_reasons_json,
+              [],
+            ),
+            stockDecision: row.stock_decision,
+            recommendedStockUnits:
+              asNumber(row.recommended_stock_units) ?? 0,
+            stockCapitalPaise:
+              asNumber(row.stock_capital_paise) ?? 0,
+            projectedBatchProfitPaise:
+              asNumber(row.projected_batch_profit_paise),
+            reorderPointUnits:
+              asNumber(row.reorder_point_units) ?? 0,
             blockingReasons: parseJson<readonly string[]>(
               row.blocking_reasons_json,
               [],
@@ -263,6 +333,14 @@ export function loadCommerceDashboardSnapshot(
     ).length,
     listed: products.filter(
       (product) => product.lifecycleState === "LISTED",
+    ).length,
+    buySmall: products.filter(
+      (product) =>
+        product.evaluation?.stockDecision === "BUY_SMALL",
+    ).length,
+    stockWatch: products.filter(
+      (product) =>
+        product.evaluation?.stockDecision === "WATCH",
     ).length,
   };
 
