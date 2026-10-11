@@ -1240,6 +1240,52 @@ export const MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
+  {
+    version: 19,
+    name: "buyer_intent_research_registry",
+    sql: `
+      ALTER TABLE products ADD COLUMN research_product_key TEXT;
+      ALTER TABLE products ADD COLUMN generic_title TEXT;
+
+      CREATE UNIQUE INDEX products_research_product_key_idx
+        ON products(research_product_key)
+        WHERE research_product_key IS NOT NULL;
+
+      CREATE TABLE research_subjects (
+        product_key TEXT PRIMARY KEY,
+        normalized_signature TEXT NOT NULL UNIQUE,
+        generic_title TEXT NOT NULL,
+        category TEXT NOT NULL,
+        lifecycle_state TEXT NOT NULL CHECK (
+          lifecycle_state IN (
+            'INTENT_CANDIDATE',
+            'RESEARCHED',
+            'HOLD',
+            'REJECT',
+            'INVESTIGATE',
+            'LISTED'
+          )
+        ),
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        last_deep_researched_at TEXT,
+        listed_at TEXT,
+        last_candidate_id TEXT
+      ) STRICT;
+
+      CREATE INDEX research_subjects_state_idx
+        ON research_subjects(lifecycle_state, last_deep_researched_at);
+
+      CREATE TABLE buyer_intent_runs (
+        id TEXT PRIMARY KEY,
+        generated_at TEXT NOT NULL,
+        input_hash TEXT NOT NULL UNIQUE,
+        hypothesis_count INTEGER NOT NULL CHECK (hypothesis_count >= 0),
+        accepted_count INTEGER NOT NULL CHECK (accepted_count >= 0),
+        rejected_count INTEGER NOT NULL CHECK (rejected_count >= 0),
+        created_at TEXT NOT NULL
+      ) STRICT;
+    `,
 ];
 
 export function applyMigrations(
