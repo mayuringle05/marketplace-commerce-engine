@@ -108,6 +108,42 @@ function scenario(): EconomicScenario {
   };
 }
 
+function seedFulfilmentCompatibilityEvidence(
+  database: DatabaseSync,
+): void {
+  const insert = database.prepare(
+    `
+      INSERT INTO observations (
+        id,
+        subject_type,
+        subject_id,
+        observation_type,
+        value_text,
+        source_ref,
+        evidence_hash,
+        observed_at
+      ) VALUES (
+        ?, 'fulfilment_route', 'route-1', ?, 'VERIFIED',
+        'fixture-fulfilment-contract', ?, ?
+      )
+    `,
+  );
+
+  [
+    "NEUTRAL_OUTER_PACKAGING",
+    "NO_SUPPLIER_BRANDING",
+    "SELLER_INVOICE_SUPPORTED",
+    "MARKETPLACE_LABEL_SUPPORTED",
+  ].forEach((type, index) => {
+    insert.run(
+      `fixture-fulfilment-${index}`,
+      type,
+      `fixture-fulfilment-hash-${index}`,
+      "2026-10-07T00:01:00.000Z",
+    );
+  });
+}
+
 export function seedSingleSkuFixture(
   database: DatabaseSync,
   options: SingleSkuFixtureOptions = {},
@@ -159,6 +195,7 @@ export function seedSingleSkuFixture(
       `,
     )
     .run(FIXTURE_T0, FIXTURE_T0);
+  seedFulfilmentCompatibilityEvidence(database);
 
   importSupplierFeed(
     database,
