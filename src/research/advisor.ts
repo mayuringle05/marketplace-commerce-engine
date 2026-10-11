@@ -519,7 +519,7 @@ export function validateCommerceAdvicePack(
         asks: requireStringArray(
           negotiation.asks,
           `advice[${index}].supplierNegotiation.asks`,
-          1,
+          negotiation.shouldNegotiate ? 1 : 0,
           8,
           400,
         ),
