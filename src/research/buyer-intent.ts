@@ -428,7 +428,7 @@ export function filterBuyerIntentHypotheses(
     if (seenThisBatch.has(productKey)) {
       blockingReason = "DUPLICATE_IN_BATCH";
     } else if (
-      hypothesis.commercialIntentScore < 65 ||
+      hypothesis.commercialIntentScore < 70 ||
       hypothesis.urgencyScore < 35
     ) {
       blockingReason = "BUYER_INTENT_TOO_WEAK";
