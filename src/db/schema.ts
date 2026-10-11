@@ -1497,6 +1497,7 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX research_advice_product_idx
         ON research_advice(product_key, created_at DESC);
     `,
+  },
 ];
 
 export function applyMigrations(
