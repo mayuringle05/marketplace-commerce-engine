@@ -23,7 +23,8 @@
     "backup": "node src/cli/backup.ts",
     "buyer-intent:filter": "node src/cli/buyer-intent.ts filter",
     "buyer-intent:mark-listed": "node src/cli/buyer-intent.ts mark-listed",
-    "dashboard": "node src/dashboard/server.ts"
+    "dashboard": "node src/dashboard/server.ts",
+    "economics-profile:import": "node src/cli/economics-profile.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.1",
