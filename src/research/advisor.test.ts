@@ -233,3 +233,65 @@ test("advisor packet is deterministic-bound and transaction powerless", () => {
     database.close();
   }
 });
+
+
+test("advisor permits empty asks when supplier negotiation is disabled", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: GENERATED_AT,
+  });
+
+  try {
+    const productKey = seedEvaluation(database);
+    const packet = buildCommerceAdvisorPacket(
+      database,
+      {
+        schemaVersion: 1,
+        productKeys: [productKey],
+      },
+      ADVICE_AT,
+    );
+    const fact = packet.facts[0];
+    assert.ok(fact);
+
+    const advice = validateCommerceAdvicePack(
+      {
+        schemaVersion: 1,
+        generatedAt: ADVICE_AT,
+        transactionAuthority: false,
+        supplierContactAuthority: false,
+        advice: [
+          {
+            productKey: fact.productKey,
+            evaluationId: fact.evaluationId,
+            inputHash: fact.inputHash,
+            headline: "Do not negotiate this product yet.",
+            explanation:
+              "The current decision does not justify supplier outreach.",
+            recommendedStrategy: [
+              "Keep the product on watch until the deterministic decision improves.",
+            ],
+            supplierNegotiation: {
+              shouldNegotiate: false,
+              objective:
+                "Avoid supplier outreach until the product is commercially actionable.",
+              openingMessage: null,
+              followUps: [],
+              asks: [],
+              cautions: [
+                "Do not imply purchase intent while the product is not actionable.",
+              ],
+            },
+          },
+        ],
+      },
+      packet,
+    );
+
+    assert.deepEqual(
+      advice.advice[0]?.supplierNegotiation.asks,
+      [],
+    );
+  } finally {
+    database.close();
+  }
+});
