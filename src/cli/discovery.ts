@@ -10,11 +10,17 @@ import {
   parseProductDiscoveryBatchJson,
 } from "../research/product-discovery.ts";
 import {
+  findActiveEconomicsProfile,
+} from "../research/economics-profile.ts";
+import {
   buildResearchPricingStrategy,
 } from "../research/pricing-strategy.ts";
 import {
   persistResearchEvaluation,
 } from "../research/research-store.ts";
+import {
+  buildVerifiedCommerceStrategy,
+} from "../research/verified-strategy.ts";
 
 const filePath = process.argv[2];
 const dbPath = process.argv[3];
@@ -61,6 +67,18 @@ if (dbPath !== undefined) {
         candidate,
         result,
       );
+      const profile = findActiveEconomicsProfile(
+        database,
+        candidate.marketplace,
+        candidate.category,
+        now,
+      );
+      const verifiedStrategy = buildVerifiedCommerceStrategy(
+        candidate,
+        result,
+        pricing,
+        profile,
+      );
       persistResearchEvaluation(
         database,
         {
@@ -70,6 +88,7 @@ if (dbPath !== undefined) {
           candidate,
           evaluation: result,
           pricing,
+          verifiedStrategy,
         },
       );
     }
