@@ -50,6 +50,7 @@ interface DashboardRow {
   readonly net_profit_verified: bigint | null;
   readonly demand_class: string | null;
   readonly economics_profile_id: string | null;
+  readonly economics_verification_status: string | null;
   readonly economics_status: string | null;
   readonly verified_price_paise: bigint | null;
   readonly expected_net_profit_paise: bigint | null;
@@ -108,6 +109,7 @@ export interface CommerceDashboardProduct {
     readonly netProfitVerified: boolean;
     readonly demandClass: string | null;
     readonly economicsProfileId: string | null;
+    readonly economicsVerificationStatus: string | null;
     readonly economicsStatus: string | null;
     readonly verifiedPricePaise: number | null;
     readonly expectedNetProfitPaise: number | null;
@@ -217,6 +219,7 @@ export function loadCommerceDashboardSnapshot(
           e.net_profit_verified,
           e.demand_class,
           e.economics_profile_id,
+          e.economics_verification_status,
           e.economics_status,
           e.verified_price_paise,
           e.expected_net_profit_paise,
@@ -297,6 +300,8 @@ export function loadCommerceDashboardSnapshot(
               asNumber(row.net_profit_verified) === 1,
             demandClass: row.demand_class,
             economicsProfileId: row.economics_profile_id,
+            economicsVerificationStatus:
+              row.economics_verification_status,
             economicsStatus: row.economics_status,
             verifiedPricePaise:
               asNumber(row.verified_price_paise),
