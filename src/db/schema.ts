@@ -1294,6 +1294,180 @@ export const MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 20,
+    name: "research_dashboard_and_pricing",
+    sql: `
+      ALTER TABLE research_subjects ADD COLUMN last_intent_id TEXT;
+      ALTER TABLE research_subjects ADD COLUMN commercial_intent_score INTEGER
+        CHECK (
+          commercial_intent_score IS NULL OR
+          (commercial_intent_score >= 0 AND commercial_intent_score <= 100)
+        );
+      ALTER TABLE research_subjects ADD COLUMN urgency_score INTEGER
+        CHECK (
+          urgency_score IS NULL OR
+          (urgency_score >= 0 AND urgency_score <= 100)
+        );
+
+      CREATE TABLE research_evaluations (
+        id TEXT PRIMARY KEY,
+        product_key TEXT NOT NULL
+          REFERENCES research_subjects(product_key) ON DELETE RESTRICT,
+        candidate_id TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        marketplace TEXT NOT NULL CHECK (
+          marketplace IN ('AMAZON_IN', 'FLIPKART_IN')
+        ),
+        market_reference_price_paise INTEGER NOT NULL
+          CHECK (market_reference_price_paise > 0),
+        supplier_cost_paise INTEGER NOT NULL
+          CHECK (supplier_cost_paise >= 0),
+        competition_score INTEGER NOT NULL
+          CHECK (competition_score >= 0 AND competition_score <= 100),
+        trend_confidence INTEGER NOT NULL
+          CHECK (trend_confidence >= 0 AND trend_confidence <= 100),
+        demand_reactive INTEGER NOT NULL
+          CHECK (demand_reactive >= 0 AND demand_reactive <= 100),
+        demand_predictive INTEGER NOT NULL
+          CHECK (demand_predictive >= 0 AND demand_predictive <= 100),
+        demand_structural INTEGER NOT NULL
+          CHECK (demand_structural >= 0 AND demand_structural <= 100),
+        demand_score INTEGER NOT NULL
+          CHECK (demand_score >= 0 AND demand_score <= 100),
+        recommendation TEXT NOT NULL CHECK (
+          recommendation IN ('INVESTIGATE', 'HOLD', 'REJECT')
+        ),
+        candidate_score INTEGER NOT NULL
+          CHECK (candidate_score >= 0 AND candidate_score <= 100),
+        estimated_gross_spread_bps INTEGER NOT NULL
+          CHECK (estimated_gross_spread_bps >= 0),
+        pricing_strategy TEXT NOT NULL CHECK (
+          pricing_strategy IN (
+            'BLOCKED',
+            'MARKET_REFERENCE_ONLY',
+            'COMPETITIVE_ENTRY',
+            'BALANCED',
+            'MARGIN_FIRST'
+          )
+        ),
+        pricing_confidence_score INTEGER NOT NULL
+          CHECK (
+            pricing_confidence_score >= 0 AND
+            pricing_confidence_score <= 100
+          ),
+        suggested_floor_price_paise INTEGER
+          CHECK (
+            suggested_floor_price_paise IS NULL OR
+            suggested_floor_price_paise > 0
+          ),
+        suggested_price_paise INTEGER
+          CHECK (
+            suggested_price_paise IS NULL OR
+            suggested_price_paise > 0
+          ),
+        suggested_ceiling_price_paise INTEGER
+          CHECK (
+            suggested_ceiling_price_paise IS NULL OR
+            suggested_ceiling_price_paise > 0
+          ),
+        estimated_gross_profit_paise INTEGER,
+        estimated_gross_margin_bps INTEGER,
+        net_profit_verified INTEGER NOT NULL DEFAULT 0
+          CHECK (net_profit_verified IN (0, 1)),
+        blocking_reasons_json TEXT NOT NULL,
+        risk_json TEXT NOT NULL,
+        sources_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (product_key, candidate_id, generated_at)
+      ) STRICT;
+
+      CREATE INDEX research_evaluations_product_idx
+        ON research_evaluations(product_key, created_at DESC);
+
+      CREATE INDEX research_evaluations_recommendation_idx
+        ON research_evaluations(recommendation, created_at DESC);
+    `,
+  },
+  {
+    version: 21,
+    name: "verified_economics_and_stock_strategy",
+    sql: `
+      CREATE TABLE marketplace_economics_profiles (
+        profile_id TEXT PRIMARY KEY,
+        marketplace TEXT NOT NULL CHECK (
+          marketplace IN ('AMAZON_IN', 'FLIPKART_IN')
+        ),
+        category_scope TEXT NOT NULL,
+        effective_from TEXT NOT NULL,
+        effective_until TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        source_version TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        profile_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        CHECK (effective_until > effective_from)
+      ) STRICT;
+
+      CREATE INDEX marketplace_economics_profiles_lookup_idx
+        ON marketplace_economics_profiles(
+          marketplace,
+          category_scope,
+          effective_from,
+          effective_until,
+          verified_at
+        );
+
+      ALTER TABLE research_evaluations
+        ADD COLUMN demand_class TEXT CHECK (
+          demand_class IS NULL OR
+          demand_class IN ('EVERGREEN', 'SEASONAL', 'MIXED', 'UNPROVEN')
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_profile_id TEXT
+          REFERENCES marketplace_economics_profiles(profile_id)
+          ON DELETE RESTRICT;
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_status TEXT CHECK (
+          economics_status IS NULL OR
+          economics_status IN ('PASS', 'WATCH', 'REJECT')
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN verified_price_paise INTEGER CHECK (
+          verified_price_paise IS NULL OR verified_price_paise > 0
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN expected_net_profit_paise INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN decision_margin_bps INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN cash_roi_bps INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN stress_net_profit_paise INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN economics_reasons_json TEXT;
+      ALTER TABLE research_evaluations
+        ADD COLUMN stock_decision TEXT CHECK (
+          stock_decision IS NULL OR
+          stock_decision IN ('BUY_SMALL', 'WATCH', 'DO_NOT_STOCK')
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN recommended_stock_units INTEGER CHECK (
+          recommended_stock_units IS NULL OR
+          recommended_stock_units >= 0
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN stock_capital_paise INTEGER CHECK (
+          stock_capital_paise IS NULL OR stock_capital_paise >= 0
+        );
+      ALTER TABLE research_evaluations
+        ADD COLUMN projected_batch_profit_paise INTEGER;
+      ALTER TABLE research_evaluations
+        ADD COLUMN reorder_point_units INTEGER CHECK (
+          reorder_point_units IS NULL OR reorder_point_units >= 0
+        );
+    `,
+  },
 ];
 
 export function applyMigrations(

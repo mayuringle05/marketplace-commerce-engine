@@ -4,9 +4,11 @@ Deterministic, local-only marketplace commerce engine for the COSMO COMMERCE str
 
 ## Status
 
-The local end-to-end path is a **patched simulation candidate under independent safety re-audit**.
-
-The file-backed workflow and regression suite are green, but that is evidence—not permission to trade. PR #6 must not be merged as production-quality until the patched head receives a fresh independent audit.
+The local end-to-end safety baseline is merged and the file-backed workflow and
+regression suite are green. That is engineering evidence—not permission to
+trade. Real marketplace/supplier mutation remains blocked by Gate 0 until the
+required commercial, legal, account, supplier and economics evidence is real
+and current.
 
 It can run this lifecycle entirely on the local machine:
 
@@ -122,6 +124,58 @@ npm run exposure -- resume data/commerce.sqlite OWNER_RECONCILED
 ```
 
 Liquidity shortfall can also force global stop-new-exposure and pause active listings.
+
+## Local research dashboard
+
+COSMO buyer-intent and deep-research results are persisted in the same local
+SQLite database used by the commerce engine. Launch the read-only dashboard:
+
+```bash
+npm run dashboard -- data/commerce.sqlite
+```
+
+Then open `http://127.0.0.1:4399`.
+
+The dashboard shows tracked product ideas, intent/urgency, Amazon/Flipkart
+research, demand and competition scores, evidence links, recommendation,
+blockers, and deterministic research-stage pricing.
+
+Pricing is deliberately split into two levels:
+
+- **research pricing**: market reference, supplier cost, gross price band,
+  estimated gross profit and gross margin;
+- **verified net economics**: only available after current marketplace fees,
+  tax treatment, shipping, returns and other material costs are known.
+
+A rejected candidate never receives an actionable suggested sell price.
+The dashboard itself has no listing, purchasing or transaction authority.
+
+### Verified economics and stock pilot sizing
+
+Do not hard-code marketplace fee assumptions as truth. Start from
+`config/marketplace-economics.example.json`, replace every placeholder with
+current verified values and official/source evidence, then explicitly set
+`verificationStatus` to `VERIFIED`.
+
+Import one marketplace/category profile:
+
+```bash
+npm run economics-profile:import -- config/amazon-desk-verified.json data/commerce.sqlite
+```
+
+Importing a profile automatically recomputes all saved research rows against
+the newest applicable profile. The dashboard can then show:
+
+- demand class: EVERGREEN / SEASONAL / MIXED / UNPROVEN;
+- verified bounded sell price;
+- expected net profit per unit and stress profit;
+- decision margin and cash ROI;
+- BUY_SMALL / WATCH / DO_NOT_STOCK;
+- bounded initial units, capital required, projected batch profit, and reorder
+  point.
+
+`BUY_SMALL` is only a recommendation for an owner-approved pilot. It never
+places a supplier order or creates a marketplace listing.
 
 ## Local worker
 

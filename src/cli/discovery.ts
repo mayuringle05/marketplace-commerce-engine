@@ -9,6 +9,18 @@ import {
   evaluateDiscoveryCandidate,
   parseProductDiscoveryBatchJson,
 } from "../research/product-discovery.ts";
+import {
+  findActiveEconomicsProfile,
+} from "../research/economics-profile.ts";
+import {
+  buildResearchPricingStrategy,
+} from "../research/pricing-strategy.ts";
+import {
+  persistResearchEvaluation,
+} from "../research/research-store.ts";
+import {
+  buildVerifiedCommerceStrategy,
+} from "../research/verified-strategy.ts";
 
 const filePath = process.argv[2];
 const dbPath = process.argv[3];
@@ -41,7 +53,7 @@ if (dbPath !== undefined) {
           "Discovery result/candidate cardinality mismatch.",
         );
       }
-      recordDeepResearchOutcome(
+      const productKey = recordDeepResearchOutcome(
         database,
         {
           candidateId: candidate.candidateId,
@@ -50,6 +62,34 @@ if (dbPath !== undefined) {
           recommendation: result.recommendation,
         },
         now,
+      );
+      const pricing = buildResearchPricingStrategy(
+        candidate,
+        result,
+      );
+      const profile = findActiveEconomicsProfile(
+        database,
+        candidate.marketplace,
+        candidate.category,
+        now,
+      );
+      const verifiedStrategy = buildVerifiedCommerceStrategy(
+        candidate,
+        result,
+        pricing,
+        profile,
+      );
+      persistResearchEvaluation(
+        database,
+        {
+          productKey,
+          generatedAt: batch.generatedAt,
+          recordedAt: now,
+          candidate,
+          evaluation: result,
+          pricing,
+          verifiedStrategy,
+        },
       );
     }
   } finally {
