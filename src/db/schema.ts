@@ -1276,6 +1276,13 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX research_subjects_state_idx
         ON research_subjects(lifecycle_state, last_deep_researched_at);
 
+      ALTER TABLE opportunities ADD COLUMN research_product_key TEXT
+        REFERENCES research_subjects(product_key) ON DELETE RESTRICT;
+
+      CREATE INDEX opportunities_research_product_key_idx
+        ON opportunities(research_product_key)
+        WHERE research_product_key IS NOT NULL;
+
       CREATE TABLE buyer_intent_runs (
         id TEXT PRIMARY KEY,
         generated_at TEXT NOT NULL,
