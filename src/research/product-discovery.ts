@@ -200,10 +200,9 @@ function parseRisk(value: unknown): DiscoveryRisk {
 function parseSources(value: unknown): readonly DiscoverySource[] {
   if (
     !Array.isArray(value) ||
-    value.length === 0 ||
     value.length > 20
   ) {
-    throw new Error("sources must contain 1..20 entries.");
+    throw new Error("sources must contain 0..20 entries.");
   }
 
   return value.map((item, index) => {
