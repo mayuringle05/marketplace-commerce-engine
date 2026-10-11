@@ -76,6 +76,7 @@ export function persistResearchEvaluation(
           net_profit_verified,
           demand_class,
           economics_profile_id,
+          economics_verification_status,
           economics_status,
           verified_price_paise,
           expected_net_profit_paise,
@@ -94,7 +95,7 @@ export function persistResearchEvaluation(
           created_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?
         )
         ON CONFLICT(product_key, candidate_id, generated_at)
@@ -128,6 +129,8 @@ export function persistResearchEvaluation(
           net_profit_verified = excluded.net_profit_verified,
           demand_class = excluded.demand_class,
           economics_profile_id = excluded.economics_profile_id,
+          economics_verification_status =
+            excluded.economics_verification_status,
           economics_status = excluded.economics_status,
           verified_price_paise = excluded.verified_price_paise,
           expected_net_profit_paise = excluded.expected_net_profit_paise,
@@ -174,6 +177,7 @@ export function persistResearchEvaluation(
       input.verifiedStrategy.netProfitVerified ? 1 : 0,
       input.verifiedStrategy.demandClass,
       input.verifiedStrategy.economicsProfileId,
+      input.verifiedStrategy.economicsVerificationStatus,
       input.verifiedStrategy.economicsStatus,
       input.verifiedStrategy.verifiedPricePaise,
       input.verifiedStrategy.expectedNetProfitPaise,
