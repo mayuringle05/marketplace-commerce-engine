@@ -9,6 +9,9 @@ import {
   evaluateFulfilmentCompatibility,
 } from "../fulfilment/compatibility.ts";
 import {
+  markResearchSubjectListed,
+} from "../research/buyer-intent.ts";
+import {
   readSimulatedListing,
   upsertSimulatedListing,
 } from "../marketplace/simulated.ts";
@@ -32,6 +35,7 @@ interface ListingGateRow {
   readonly opportunity_product_id: string;
   readonly opportunity_trade_unit_id: string;
   readonly opportunity_source_offer_id: string;
+  readonly opportunity_research_product_key: string | null;
   readonly approved_price_paise: bigint | null;
   readonly required_cash_paise_per_unit: bigint | null;
   readonly source_fresh_until: string | null;
@@ -70,6 +74,7 @@ function loadListingGate(
           o.product_id AS opportunity_product_id,
           o.trade_unit_id AS opportunity_trade_unit_id,
           o.source_offer_id AS opportunity_source_offer_id,
+          o.research_product_key AS opportunity_research_product_key,
           o.approved_price_paise,
           o.required_cash_paise_per_unit,
           o.source_fresh_until,
@@ -393,6 +398,14 @@ export function syncListingToSimulatedMarketplace(
       input.marketplace,
       input.sellerSku,
     );
+
+  if (gate.opportunity_research_product_key !== null) {
+    markResearchSubjectListed(database, {
+      productId: gate.opportunity_product_id,
+      productKey: gate.opportunity_research_product_key,
+      listedAt: input.updatedAt,
+    });
+  }
 
   return id;
 }
