@@ -208,6 +208,34 @@ test("listed subjects are permanently excluded from deep research", () => {
   }
 });
 
+test("borderline commercial intent is filtered before expensive research", () => {
+  const database = openDatabase(":memory:", {
+    appliedAt: T0,
+  });
+
+  try {
+    const parsed = parseBuyerIntentFilterBatchJson(
+      batch({
+        commercialIntentScore: 69,
+        urgencyScore: 80,
+      }),
+    );
+    const result = filterBuyerIntentHypotheses(
+      database,
+      parsed,
+      "2026-10-11T10:01:00.000Z",
+    );
+
+    assert.equal(result.accepted.length, 0);
+    assert.equal(
+      result.rejected[0]?.blockingReason,
+      "BUYER_INTENT_TOO_WEAK",
+    );
+  } finally {
+    database.close();
+  }
+});
+
 test("weak buyer intent and duplicate product hypotheses never reach deep research", () => {
   const database = openDatabase(":memory:", {
     appliedAt: T0,
