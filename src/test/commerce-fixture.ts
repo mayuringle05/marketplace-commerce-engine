@@ -8,6 +8,9 @@ import { evaluateCandidate } from "../economics/engine.ts";
 import { asPaise } from "../economics/money.ts";
 import type { EconomicScenario } from "../economics/types.ts";
 import { syncListingToSimulatedMarketplace } from "../listings/service.ts";
+import {
+  recordDeepResearchOutcome,
+} from "../research/buyer-intent.ts";
 import { persistOpportunity } from "../opportunities/engine.ts";
 import { ingestMarketplaceOrder } from "../orders/ingest.ts";
 import { validateAndAuthorizeOrder } from "../orders/authorization.ts";
@@ -26,6 +29,8 @@ export interface SingleSkuFixtureOptions {
   readonly availableUnits?: number;
   readonly cashPaise?: number;
   readonly listingQuantity?: number;
+  readonly researchTitle?: string;
+  readonly researchCategory?: string;
 }
 
 export interface SingleSkuFixture {
@@ -279,6 +284,21 @@ export function seedSingleSkuFixture(
     )
     .get() as { id: string; pool_id: string };
 
+  const researchProductKey =
+    options.researchTitle !== undefined &&
+    options.researchCategory !== undefined
+      ? recordDeepResearchOutcome(
+          database,
+          {
+            candidateId: "fixture-research-candidate",
+            title: options.researchTitle,
+            category: options.researchCategory,
+            recommendation: "INVESTIGATE",
+          },
+          "2026-10-07T00:09:30.000Z",
+        )
+      : null;
+
   const economics = evaluateCandidate(scenario());
   const freshness = evaluateLatestSourceOffer(
     database,
@@ -305,6 +325,7 @@ export function seedSingleSkuFixture(
       structural: 95,
     },
     evidenceVersion: "fixture-evidence-v1",
+    researchProductKey,
     createdAt: "2026-10-07T00:10:00.000Z",
   });
 
