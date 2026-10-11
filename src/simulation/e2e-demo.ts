@@ -133,6 +133,37 @@ function seedCommercialFixture(database: DatabaseSync): void {
     )
     .run("route-1", "supplier-1", T0, T0);
 
+  const insertFulfilmentEvidence = database.prepare(
+    `
+      INSERT INTO observations (
+        id,
+        subject_type,
+        subject_id,
+        observation_type,
+        value_text,
+        source_ref,
+        evidence_hash,
+        observed_at
+      ) VALUES (
+        ?, 'fulfilment_route', 'route-1', ?, 'VERIFIED',
+        'demo-fulfilment-contract', ?, ?
+      )
+    `,
+  );
+  [
+    "NEUTRAL_OUTER_PACKAGING",
+    "NO_SUPPLIER_BRANDING",
+    "SELLER_INVOICE_SUPPORTED",
+    "MARKETPLACE_LABEL_SUPPORTED",
+  ].forEach((type, index) => {
+    insertFulfilmentEvidence.run(
+      `demo-fulfilment-${index}`,
+      type,
+      `demo-fulfilment-hash-${index}`,
+      "2026-10-07T00:01:00.000Z",
+    );
+  });
+
   importSupplierFeed(
     database,
     parseSupplierFeedJson(
