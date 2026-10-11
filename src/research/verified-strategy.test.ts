@@ -134,6 +134,45 @@ test("verified economics can produce a bounded small-stock pilot", () => {
   assert.ok(strategy.reorderPointUnits >= 1);
 });
 
+
+
+test("public standard economics remain indicative and never recommend stock purchase", () => {
+  const item = candidate();
+  const evaluation = evaluateDiscoveryCandidate(item);
+  const pricing = buildResearchPricingStrategy(
+    item,
+    evaluation,
+  );
+  const publicProfile = parseMarketplaceEconomicsProfileJson(
+    JSON.stringify({
+      ...JSON.parse(JSON.stringify(verifiedProfile())),
+      profileId: "amazon-public-desk-2026-10",
+      verificationStatus: "PUBLIC_STANDARD",
+    }),
+  );
+
+  const strategy = buildVerifiedCommerceStrategy(
+    item,
+    evaluation,
+    pricing,
+    publicProfile,
+  );
+
+  assert.equal(
+    strategy.economicsVerificationStatus,
+    "PUBLIC_STANDARD",
+  );
+  assert.equal(strategy.netProfitVerified, false);
+  assert.equal(strategy.stockDecision, "WATCH");
+  assert.equal(strategy.recommendedStockUnits, 0);
+  assert.equal(strategy.verifiedPricePaise, null);
+  assert.ok(
+    strategy.economicsReasons.includes(
+      "PUBLIC_STANDARD_ECONOMICS_NOT_SELLER_VERIFIED",
+    ),
+  );
+});
+
 test("missing verified economics never recommends buying stock", () => {
   const item = candidate();
   const evaluation = evaluateDiscoveryCandidate(item);
