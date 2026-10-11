@@ -343,16 +343,22 @@ function upsertIntentCandidate(
           last_seen_at,
           last_deep_researched_at,
           listed_at,
-          last_candidate_id
+          last_candidate_id,
+          last_intent_id,
+          commercial_intent_score,
+          urgency_score
         ) VALUES (
           ?, ?, ?, ?, 'INTENT_CANDIDATE',
-          ?, ?, NULL, NULL, ?
+          ?, ?, NULL, NULL, ?, ?, ?, ?
         )
         ON CONFLICT(product_key) DO UPDATE SET
           generic_title = excluded.generic_title,
           category = excluded.category,
           last_seen_at = excluded.last_seen_at,
-          last_candidate_id = excluded.last_candidate_id
+          last_candidate_id = excluded.last_candidate_id,
+          last_intent_id = excluded.last_intent_id,
+          commercial_intent_score = excluded.commercial_intent_score,
+          urgency_score = excluded.urgency_score
       `,
     )
     .run(
@@ -363,6 +369,9 @@ function upsertIntentCandidate(
       seenAt,
       seenAt,
       hypothesis.hypothesisId,
+      hypothesis.intentId,
+      hypothesis.commercialIntentScore,
+      hypothesis.urgencyScore,
     );
 }
 
